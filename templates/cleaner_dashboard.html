@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <title>Cleaner Dashboard - AirCalendo</title>
+    <link href="https://fonts.googleapis.com/css2?family=Italiana&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/static/cleaner_dashboard.css" />
+</head>
+<body>
+    <header class="dashboard-header">
+        <h1>Welcome, {{ username }}</h1>
+        <div class="header-icons">
+            <span class="icon chat-icon" title="Chat">&#128172;</span>
+            <span class="icon notification-icon" title="Notifications">&#128276;<sup class="notification-count">1</sup></span>
+            <span class="icon profile-icon" title="Profile">&#128100;</span>
+        </div>
+    </header>
+    <main class="job-list">
+        {% for job in jobs %}
+        <div class="job-card">
+            <div class="job-client">{{ job.client_name }}</div>
+            <div class="job-date">{{ job.date }}</div>
+            <div class="job-payment">{{ job.payment }}</div>
+        </div>
+        {% else %}
+        <p>No jobs assigned.</p>
+        {% endfor %}
+    </main>
+    <footer class="dashboard-footer">
+        <a href="/bookings" class="footer-icon" title="Bookings">&#128221;</a>
+        <a href="/clock" class="footer-icon" title="Clock">&#128337;</a>
+        <a href="/calendar" class="footer-icon" title="Calendar">&#128197;</a>
+    </footer>
+</body>
+</html>

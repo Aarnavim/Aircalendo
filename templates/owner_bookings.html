@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <title>Owner Bookings - AirCalendo</title>
+    <link href="https://fonts.googleapis.com/css2?family=Italiana&display=swap" rel="stylesheet" />
+    <style>
+        body {
+            font-family: 'Italiana', serif;
+            background-color: white;
+            color: black;
+            margin: 20px;
+        }
+        h1 {
+            font-size: 28px;
+            margin-bottom: 20px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 18px;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 12px;
+            text-align: left;
+        }
+        th {
+            background-color: #f7a89c; /* peach pink */
+        }
+        tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+        .username {
+            margin-bottom: 10px;
+            font-style: italic;
+        }
+        .role {
+            font-weight: bold;
+        }
+        a {
+            color: black;
+            text-decoration: none;
+        }
+        a:hover {
+            text-decoration: underline;
+        }
+        .add-booking-btn {
+            display: inline-block;
+            margin-bottom: 15px;
+            padding: 8px 15px;
+            background-color: #f7a89c;
+            color: black;
+            text-decoration: none;
+            border-radius: 4px;
+            font-weight: bold;
+        }
+        .add-booking-btn:hover {
+            background-color: #e68a7a;
+        }
+        form {
+            display: inline;
+        }
+        button.delete-btn {
+            background: none;
+            border: none;
+            color: red;
+            cursor: pointer;
+            font-size: 18px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Owner Bookings</h1>
+    <a href="/owner" class="dashboard-btn" style="display:inline-block; margin-bottom: 15px; padding: 8px 15px; background-color: #f7a89c; color: black; text-decoration: none; border-radius: 4px; font-weight: bold;">Home</a>
+    <p class="username">User: {{ username }} (<span class="role">{{ role }}</span>)</p>
+    <a href="{{ url_for('add_booking') }}" class="add-booking-btn">Add New Booking</a>
+    <table>
+        <thead>
+            <tr>
+                <th>Client Name</th>
+                <th>Date</th>
+                <th>Time</th>
+                <th>Location</th>
+                <th>Cleaner</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for booking in bookings %}
+            <tr>
+                <td>{{ booking[1] }}</td>
+                <td>{{ booking[2] }}</td>
+                <td>{{ booking[3] }}</td>
+                <td>{{ booking[4] }}</td>
+                <td>{{ booking[5] }}</td>
+                <td>
+                    <a href="{{ url_for('edit_booking', booking_id=booking[0]) }}" title="Edit Booking" style="margin-right: 10px;">&#9998;</a>
+                    <form action="{{ url_for('delete_booking', booking_id=booking[0]) }}" method="POST" style="display:inline;">
+                        <button type="submit" title="Delete Booking" class="delete-btn">&#128465;</button>
+                    </form>
+                </td>
+            </tr>
+            {% else %}
+            <tr>
+                <td colspan="6">No bookings found.</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    <footer class="dashboard-footer">
+    </footer>
+    <script>
+        async function fetchBookings() {
+            try {
+                const response = await fetch('/api/bookings');
+                if (!response.ok) {
+                    console.error('Failed to fetch bookings:', response.status);
+                    return;
+                }
+                const bookings = await response.json();
+                const tbody = document.querySelector('table tbody');
+                tbody.innerHTML = '';
+                if (bookings.length === 0) {
+                    const tr = document.createElement('tr');
+                    const td = document.createElement('td');
+                    td.colSpan = 6;
+                    td.textContent = 'No bookings found.';
+                    tr.appendChild(td);
+                    tbody.appendChild(tr);
+                    return;
+                }
+                bookings.forEach(booking => {
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `
+                        <td>${booking.client_name}</td>
+                        <td>${booking.date}</td>
+                        <td>${booking.time}</td>
+                        <td>${booking.location}</td>
+                        <td>${booking.cleaner}</td>
+                        <td>
+                            <a href="/booking/${booking.id}/edit" title="Edit Booking" style="margin-right: 10px;">&#9998;</a>
+                            <form action="/booking/${booking.id}/delete" method="POST" style="display:inline;">
+                                <button type="submit" title="Delete Booking" class="delete-btn">&#128465;</button>
+                            </form>
+                        </td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+            } catch (error) {
+                console.error('Error fetching bookings:', error);
+            }
+        }
+        fetchBookings();
+        setInterval(fetchBookings, 10000);
+    </script>
+</body>
+</html>

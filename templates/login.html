@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>AirCalendo Login</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='login.css') }}">
+</head>
+<body>
+    <div class="login-wrapper">
+        <!-- Left Panel -->
+        <div class="login-left">
+            <div class="login-left-top">
+                <div class="title">AIRCALENDO</div>
+                <div class="subtitle">Login</div>
+                <form method="POST" action="/login">
+                    <label for="email">Email</label>
+                    <input type="text" name="email" id="email" required>
+
+                    <label for="password">Password</label>
+                    <input type="password" name="password" id="password" required>
+
+                    <button type="submit">LOGIN</button>
+                </form>
+            </div>
+            <!-- Brand Logo -->
+            <div class="brand-logo">
+                <img src="{{ url_for('static', filename='aircalendo logo.png') }}" alt="AirCalendo Logo">
+                <p>AIRCALENDO</p>
+            </div>
+        </div>
+
+        <!-- Right Panel (Image) -->
+        <div class="login-right">
+            <img src="{{ url_for('static', filename='towels.jpeg') }}" alt="Towels">
+        </div>
+    </div>
+</body>
+</html>
+

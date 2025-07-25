@@ -1,0 +1,85 @@
+body {
+    font-family: 'Italiana', serif;
+    background-color: white;
+    color: black;
+    margin: 0;
+    padding: 0;
+}
+
+.dashboard-header {
+    background-color: #f7a89c; /* peach pink */
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 15px 20px;
+}
+
+.dashboard-header h1 {
+    font-size: 24px;
+    font-weight: normal;
+    color: black;
+    margin: 0;
+}
+
+.header-icons {
+    display: flex;
+    gap: 15px;
+}
+
+.icon {
+    font-size: 24px;
+    cursor: pointer;
+    position: relative;
+}
+
+.notification-count {
+    position: absolute;
+    top: -8px;
+    right: -10px;
+    background-color: red;
+    color: white;
+    font-size: 12px;
+    padding: 2px 6px;
+    border-radius: 50%;
+}
+
+.job-list {
+    padding: 20px;
+    background-color: white;
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+.job-card {
+    background-color: white;
+    border: 1px solid #ddd;
+    padding: 15px;
+    font-size: 18px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.job-client {
+    font-weight: bold;
+    margin-bottom: 5px;
+}
+
+.job-date,
+.job-payment {
+    margin-bottom: 3px;
+}
+
+.dashboard-footer {
+    background-color: #f7a89c; /* peach pink */
+    display: flex;
+    justify-content: space-around;
+    padding: 10px 0;
+    position: fixed;
+    bottom: 0;
+    width: 100%;
+}
+
+.footer-icon {
+    font-size: 24px;
+    cursor: pointer;
+}

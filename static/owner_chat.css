@@ -1,0 +1,88 @@
+body {
+    font-family: 'Italiana', serif;
+    margin: 0;
+    background-color: white;
+    color: black;
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+}
+
+.chat-header {
+    background-color: #f7a89c; /* peach pink */
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 15px;
+}
+
+.chat-title {
+    font-size: 15px;
+    font-weight: bold;
+    color: black;
+}
+
+.home-button {
+    font-size: 20px;
+    color: black;
+    text-decoration: none;
+}
+
+.chat-messages {
+    flex-grow: 1;
+    padding: 15px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.message {
+    max-width: 60%;
+    padding: 10px 15px;
+    border-radius: 15px;
+    font-size: 16px;
+    line-height: 1.4;
+}
+
+.owner-message {
+    background-color: blue;
+    color: white;
+    align-self: flex-end;
+}
+
+.other-message {
+    background-color: white;
+    color: black;
+    border: 1px solid #ddd;
+    align-self: flex-start;
+}
+
+.chat-input-area {
+    display: flex;
+    padding: 10px 15px;
+    border-top: 1px solid #ddd;
+}
+
+.chat-input-area input[type="text"] {
+    flex-grow: 1;
+    padding: 10px;
+    font-size: 16px;
+    border: 1px solid #ddd;
+    border-radius: 20px;
+    outline: none;
+}
+
+.send-button {
+    background-color: black;
+    color: white;
+    border: none;
+    font-size: 20px;
+    padding: 0 15px;
+    margin-left: 10px;
+    border-radius: 50%;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}

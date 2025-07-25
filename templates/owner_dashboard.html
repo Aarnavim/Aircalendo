@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <title>Owner Dashboard - AirCalendo</title>
+    <link href="https://fonts.googleapis.com/css2?family=Italiana&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/static/owner_dashboard.css" />
+</head>
+<body>
+    <div class="dashboard-container">
+        <header class="dashboard-header">
+            <h1>Hi {{ username }}!</h1>
+        </header>
+        <section class="user-info">
+            <p class="address">10 Gardenia Grove, Norlane, Geelong</p>
+            <div class="profile-pic">
+                <img src="/static/profile-placeholder.png" alt="Profile Picture" />
+            </div>
+        </section>
+        <section class="dashboard-buttons">
+            <a href="/cleaner" class="dashboard-btn">Cleaner</a>
+            <a href="/bookings" class="dashboard-btn">Booking Details</a>
+            <a href="/calendar" class="dashboard-btn">Calendar</a>
+            <a href="/owner/chat" class="dashboard-btn">Chat</a>
+            <a href="/invoices" class="dashboard-btn">Invoices</a>
+        </section>
+    </div>
+</body>
+</html>

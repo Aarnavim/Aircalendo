@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <title>Cleaner Calendar - AirCalendo</title>
+    <link href="https://fonts.googleapis.com/css2?family=Italiana&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/static/owner_calendar.css" />
+    <style>
+        .calendar-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .nav-buttons {
+            display: flex;
+            gap: 10px;
+        }
+        .nav-buttons a {
+            text-decoration: none;
+            font-size: 20px;
+            padding: 5px 10px;
+            background-color: #a0c4ff;
+            color: black;
+            border-radius: 5px;
+        }
+        .nav-buttons a:hover {
+            background-color: #7da9e0;
+        }
+        .day {
+            vertical-align: top;
+            height: 100px;
+            width: 14.28%;
+            border: 1px solid #ddd;
+            padding: 5px;
+            box-sizing: border-box;
+        }
+        .day-number {
+            font-weight: bold;
+        }
+        .booking {
+            background-color: #a0c4ff;
+            margin-top: 5px;
+            padding: 2px 4px;
+            border-radius: 3px;
+            font-size: 14px;
+            overflow: hidden;
+            white-space: nowrap;
+            text-overflow: ellipsis;
+        }
+        .empty-day {
+            background-color: #f0f8ff;
+        }
+    </style>
+</head>
+<body>
+    <div class="calendar-container">
+        <header class="calendar-header">
+            <h1>{{ month_name }} {{ year }}</h1>
+            <div class="nav-buttons">
+                <a href="{{ url_for('calendar', month=month-1 if month > 1 else 12, year=year if month > 1 else year-1) }}" title="Previous Month">&#8592;</a>
+                <a href="{{ url_for('calendar', month=month+1 if month < 12 else 1, year=year if month < 12 else year+1) }}" title="Next Month">&#8594;</a>
+                <a href="/cleaner" title="Home">&#8962;</a>
+            </div>
+        </header>
+        <section class="user-info">
+            <p class="address">Your Assigned Bookings</p>
+            <p class="date">{{ month_name }} {{ year }}</p>
+        </section>
+        <table class="calendar-grid" style="width: 100%; border-collapse: collapse;">
+            <thead>
+                <tr>
+                    <th>MON</th>
+                    <th>TUE</th>
+                    <th>WED</th>
+                    <th>THUR</th>
+                    <th>FRI</th>
+                    <th>SAT</th>
+                    <th>SUN</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for week in weeks %}
+                <tr>
+                    {% for day in week %}
+                    {% if day %}
+                    <td class="day">
+                        <div class="day-number">{{ day }}</div>
+                        {% set date_str = "{:04d}-{:02d}-{:02d}".format(year, month, day) %}
+                        {% if bookings and bookings.get(date_str) %}
+                            {% for booking in bookings[date_str] %}
+                            <div class="booking">{{ booking }}</div>
+                            {% endfor %}
+                        {% endif %}
+                    </td>
+                    {% else %}
+                    <td class="day empty-day"></td>
+                    {% endif %}
+                    {% endfor %}
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</body>
+</html>
