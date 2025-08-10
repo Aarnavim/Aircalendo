@@ -210,24 +210,115 @@ def clock_in():
         return redirect(url_for('clock'))
     return redirect(url_for('home'))
 
+from flask import jsonify
+
 @app.route('/clockout')
 def clock_out():
     if session.get('role') in ['owner', 'cleaner']:
-        conn = get_db()
-        c = conn.cursor()
-        c.execute('''
-            UPDATE attendance 
-            SET clock_out=? 
-            WHERE user_id=? AND clock_out IS NULL
-        ''', (datetime.now(), session['user_id']))
-        conn.commit()
-        return redirect(url_for('clock'))
+        try:
+            conn = get_db()
+            c = conn.cursor()
+            clock_out_time = datetime.now()
+            # Get the clock_in time for the current attendance record
+            c.execute('''
+                SELECT clock_in FROM attendance
+                WHERE user_id=? AND clock_out IS NULL
+                ORDER BY clock_in DESC LIMIT 1
+            ''', (session['user_id'],))
+            row = c.fetchone()
+            if row:
+                clock_in_time = datetime.strptime(row[0], '%Y-%m-%d %H:%M:%S.%f')
+                duration = clock_out_time - clock_in_time
+                hours_worked = duration.total_seconds() / 3600.0
+                c.execute('''
+                    UPDATE attendance 
+                    SET clock_out=?, hours_worked=?
+                    WHERE user_id=? AND clock_out IS NULL
+                ''', (clock_out_time, hours_worked, session['user_id']))
+                conn.commit()
+            else:
+                return jsonify({'error': 'No active clock-in record found'}), 400
+            return jsonify({'message': 'Clocked out successfully'}), 200
+        except Exception as e:
+            print(f"Error during clock out: {e}")
+            return jsonify({'error': f'Failed to clock out: {e}'}), 500
     return redirect(url_for('home'))
+
+from datetime import timedelta
 
 @app.route('/invoices')
 def invoices():
-    if session.get('role') == 'owner':
-        return render_template('invoices.html', username=session['username'])
+    role = session.get('role')
+    conn = get_db()
+    c = conn.cursor()
+    today = datetime.now().date()
+    week_ago = today - timedelta(days=7)
+
+    if role == 'cleaner':
+        # Get bookings for the cleaner in the last 7 days
+        c.execute('''
+            SELECT id, client_name, date, time FROM bookings
+            WHERE cleaner=? AND date BETWEEN ? AND ?
+            ORDER BY date DESC
+        ''', (session['username'], week_ago.isoformat(), today.isoformat()))
+        bookings = c.fetchall()
+
+        invoice_data = []
+        for booking in bookings:
+            booking_id, client_name, date_str, time_str = booking
+            # Sum hours worked on this booking date from attendance
+            c.execute('''
+                SELECT COALESCE(SUM(hours_worked), 0) FROM attendance
+                WHERE username=? AND DATE(clock_in)=?
+            ''', (session['username'], date_str))
+            hours_worked = c.fetchone()[0] or 0
+            earning = hours_worked * 35
+            invoice_data.append({
+                'client_name': client_name,
+                'date': date_str,
+                'time': time_str,
+                'hours_worked': hours_worked,
+                'earning': earning
+            })
+        return render_template('invoice.html', username=session['username'], invoice_data=invoice_data)
+
+    elif role == 'owner':
+        # Get all cleaners
+        c.execute("SELECT username FROM users WHERE role='cleaner'")
+        cleaners = [row[0] for row in c.fetchall()]
+
+        cleaners_invoice = []
+        for cleaner_username in cleaners:
+            # Get bookings for cleaner in last 7 days
+            c.execute('''
+                SELECT id, client_name, date, time FROM bookings
+                WHERE cleaner=? AND date BETWEEN ? AND ?
+                ORDER BY date DESC
+            ''', (cleaner_username, week_ago.isoformat(), today.isoformat()))
+            bookings = c.fetchall()
+
+            invoice_data = []
+            for booking in bookings:
+                booking_id, client_name, date_str, time_str = booking
+                c.execute('''
+                    SELECT COALESCE(SUM(hours_worked), 0) FROM attendance
+                    WHERE username=? AND DATE(clock_in)=?
+                ''', (cleaner_username, date_str))
+                hours_worked = c.fetchone()[0] or 0
+                earning = hours_worked * 35
+                invoice_data.append({
+                    'client_name': client_name,
+                    'date': date_str,
+                    'time': time_str,
+                    'hours_worked': hours_worked,
+                    'earning': earning
+                })
+            cleaners_invoice.append({
+                'cleaner_username': cleaner_username,
+                'invoice_data': invoice_data
+            })
+        return render_template('invoice.html', username=session['username'], cleaners_invoice=cleaners_invoice)
+
     return redirect(url_for('home'))
 
 @app.route('/cleaner/profile', methods=['GET', 'POST'])
@@ -328,6 +419,95 @@ def owner_chat_send():
         chat_messages.append({'sender': session.get('username', 'Owner'), 'text': message})
     return redirect(url_for('owner_chat'))
 
+@app.route('/change_password')
+def change_password_form():
+    if 'user_id' not in session:
+        return redirect(url_for('home'))
+    
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT username FROM users WHERE id=?", (session['user_id'],))
+    user = cursor.fetchone()
+    current_email = user[0] if user else ''
+    
+    return render_template('change_password.html', current_email=current_email)
+
+@app.route('/change_password', methods=['POST'])
+def change_password():
+    if 'user_id' not in session:
+        return redirect(url_for('home'))
+    
+    new_email = request.form.get('new_email')
+    current_password = request.form.get('current_password')
+    new_password = request.form.get('new_password')
+    confirm_password = request.form.get('confirm_password')
+    
+    conn = get_db()
+    cursor = conn.cursor()
+    
+    # Get current user info
+    cursor.execute("SELECT username, password FROM users WHERE id=?", (session['user_id'],))
+    user = cursor.fetchone()
+    if not user:
+        return render_template('change_password.html', error="User not found")
+    
+    current_email = user[0]
+    current_db_password = user[1]
+    
+    # Verify current password
+    if current_password != current_db_password:
+        return render_template('change_password.html', 
+                             current_email=current_email, 
+                             error="Current password is incorrect")
+    
+    # Check if email is being changed
+    email_changed = new_email and new_email != current_email
+    
+    # Check if password is being changed
+    password_changed = new_password and new_password.strip() != ""
+    
+    if password_changed:
+        if new_password != confirm_password:
+            return render_template('change_password.html', 
+                                 current_email=current_email, 
+                                 error="New passwords do not match")
+    
+    # Build update query based on what changed
+    updates = []
+    params = []
+    
+    if email_changed:
+        # Check if new email already exists
+        cursor.execute("SELECT id FROM users WHERE username=? AND id!=?", (new_email, session['user_id']))
+        if cursor.fetchone():
+            return render_template('change_password.html', 
+                                 current_email=current_email, 
+                                 error="Email already exists")
+        updates.append("username=?")
+        params.append(new_email)
+    
+    if password_changed:
+        updates.append("password=?")
+        params.append(new_password)
+    
+    if updates:
+        query = f"UPDATE users SET {', '.join(updates)} WHERE id=?"
+        params.append(session['user_id'])
+        cursor.execute(query, params)
+        conn.commit()
+        
+        # Update session username if email changed
+        if email_changed:
+            session['username'] = new_email
+            
+        return render_template('change_password.html', 
+                           current_email=new_email if email_changed else current_email,
+                           success="Account settings updated successfully!")
+    
+    return render_template('change_password.html', 
+                         current_email=current_email,
+                         error="No changes detected")
+
 # ------------------------
 # MAIN
 # ------------------------
@@ -350,7 +530,8 @@ def init_db():
                     user_id INTEGER,
                     username TEXT,
                     clock_in TIMESTAMP,
-                    clock_out TIMESTAMP
+                    clock_out TIMESTAMP,
+                    hours_worked REAL DEFAULT 0
                 )
             ''')
             c.execute('''
@@ -372,7 +553,7 @@ def init_db():
                 )
             ''')
             c.execute("INSERT INTO users (username, password, role) VALUES (?, ?, ?)", ("Supriti", "Owner@gardenia", "owner"))
-            c.execute("INSERT INTO users (username, password, role) VALUES (?, ?, ?)", ("bob", "5678", "cleaner"))
+            c.execute("INSERT INTO users (username, password, role) VALUES (?, ?, ?)", ("CleanerM@AC", "Cleaner@AC", "cleaner"))
             conn.commit()
             print("Database initialized.")
 
@@ -405,6 +586,50 @@ def api_bookings():
         }
         bookings_list.append(booking_dict)
     return jsonify(bookings_list)
+
+@app.route('/api/total_hours')
+def total_hours():
+    if session.get('role') != 'cleaner':
+        return jsonify({'error': 'Unauthorized'}), 401
+    
+    conn = get_db()
+    c = conn.cursor()
+    
+    # Get total hours worked by the logged-in cleaner
+    c.execute('''
+        SELECT COALESCE(SUM(hours_worked), 0) as total_hours 
+        FROM attendance 
+        WHERE user_id = ?
+    ''', (session['user_id'],))
+    
+    result = c.fetchone()
+    total_hours = result[0] if result else 0
+    
+    return jsonify({'total_hours': round(total_hours, 2)})
+
+@app.route('/cleaner_chat_button')
+def cleaner_chat_button():
+    if session.get('role') == 'cleaner':
+        return render_template('cleaner_chat_button.html')
+    return redirect(url_for('home'))
+
+# In-memory message store for cleaner chat
+cleaner_chat_messages = []
+
+@app.route('/cleaner/chat')
+def cleaner_chat():
+    if session.get('role') != 'cleaner':
+        return redirect(url_for('home'))
+    return render_template('cleaner_chat.html', username=session.get('username', 'Cleaner'), messages=cleaner_chat_messages)
+
+@app.route('/cleaner/chat/send', methods=['POST'])
+def cleaner_chat_send():
+    if session.get('role') != 'cleaner':
+        return redirect(url_for('home'))
+    message = request.form.get('message', '').strip()
+    if message:
+        cleaner_chat_messages.append({'sender': session.get('username', 'Cleaner'), 'text': message})
+    return redirect(url_for('cleaner_chat'))
 
 if __name__ == '__main__':
     init_db()
