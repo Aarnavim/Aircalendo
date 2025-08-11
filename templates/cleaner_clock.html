@@ -64,19 +64,148 @@
 <body>
     <header>10 Gardenia Grove, Norlane</header>
     <a href="/cleaner" style="display:inline-block; margin: 15px 0; padding: 8px 15px; background-color: #f7a89c; color: black; text-decoration: none; border-radius: 4px; font-weight: bold;">Home</a>
+    
+    <!-- Job Completion Message -->
+    <div id="completionMessage" style="display: none; background-color: #4CAF50; color: white; padding: 15px; margin: 10px 0; border-radius: 5px; font-size: 18px; text-align: center;">
+        <strong>✓ Job Completed Successfully!</strong><br>
+        <span id="completionDetails"></span>
+    </div>
     <div class="job-details">
         <p><strong>Client:</strong> {{ booking[0] if booking else 'N/A' }}</p>
         <p><strong>Date:</strong> {{ booking[1] if booking else 'N/A' }}</p>
+        <p><strong>Time:</strong> {{ booking[2] if booking and booking|length > 2 else 'N/A' }}</p>
         <p><strong>Payment:</strong> $$$$</p>
+        <input type="hidden" id="bookingId" value="{{ booking[3] if booking and booking|length > 3 else 'null' }}">
     </div>
     <div class="buttons">
-        <form action="/clockin" method="get" style="display:inline;">
-            <button type="submit">Clock in</button>
-        </form>
-        <form action="/clockout" method="get" style="display:inline;">
-            <button type="submit">Clock out</button>
-        </form>
+        <div>
+            <button id="clockInBtn">Clock in</button>
+            <button id="clockOutBtn" disabled>Clock out</button>
+        </div>
+        <div style="margin-top: 10px; font-size: 18px;">
+            <span>Timer: </span><span id="timer">00:00:00</span>
+        </div>
+        <div style="margin-top: 10px; font-size: 18px;">
+            <span>Total Hours Worked: </span><span id="totalHours">0</span>
+        </div>
+        <div style="margin-top: 20px;">
+            <button onclick="generateInvoice()" style="background-color: #f7a89c;">Generate Invoice</button>
+        </div>
     </div>
+    <script>
+        let clockInTime = null;
+        let timerInterval = null;
+
+        // Load total hours worked from database
+        function loadTotalHours() {
+            fetch('/api/total_hours')
+                .then(response => response.json())
+                .then(data => {
+                    document.getElementById('totalHours').textContent = data.total_hours || '0';
+                })
+                .catch(error => {
+                    console.error('Error loading total hours:', error);
+                    document.getElementById('totalHours').textContent = '0';
+                });
+        }
+
+        function formatTime(duration) {
+            let seconds = Math.floor((duration / 1000) % 60);
+            let minutes = Math.floor((duration / (1000 * 60)) % 60);
+            let hours = Math.floor(duration / (1000 * 60 * 60));
+
+            return (
+                String(hours).padStart(2, '0') + ':' +
+                String(minutes).padStart(2, '0') + ':' +
+                String(seconds).padStart(2, '0')
+            );
+        }
+
+        function startTimer() {
+            clockInTime = new Date();
+            document.getElementById('clockInBtn').disabled = true;
+            document.getElementById('clockOutBtn').disabled = false;
+
+            timerInterval = setInterval(() => {
+                let now = new Date();
+                let elapsed = now - clockInTime;
+                document.getElementById('timer').textContent = formatTime(elapsed);
+            }, 1000);
+        }
+
+        function stopTimer() {
+            clearInterval(timerInterval);
+            document.getElementById('clockInBtn').disabled = false;
+            document.getElementById('clockOutBtn').disabled = true;
+
+            // Reload total hours after clocking out
+            setTimeout(loadTotalHours, 1000);
+        }
+
+        // Load total hours on page load
+        document.addEventListener('DOMContentLoaded', loadTotalHours);
+
+        document.getElementById('clockInBtn').addEventListener('click', () => {
+            // Get booking ID from the current booking
+            const bookingId = document.getElementById('bookingId').value;
+            const url = bookingId && bookingId !== 'null' 
+                ? `/clockin?booking_id=${bookingId}` 
+                : '/clockin';
+            
+            fetch(url)
+                .then(response => {
+                    if (response.ok) {
+                        startTimer();
+                    } else {
+                        alert('Failed to clock in.');
+                    }
+                })
+                .catch(() => alert('Failed to clock in.'));
+        });
+
+        document.getElementById('clockOutBtn').addEventListener('click', () => {
+            fetch('/clockout')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.message) {
+                        stopTimer();
+                        
+                        // Display job completion message
+                        const completionMessage = document.getElementById('completionMessage');
+                        const completionDetails = document.getElementById('completionDetails');
+                        
+                        // Get current booking details
+                        const clientName = document.querySelector('.job-details p:nth-child(1)').textContent.replace('Client: ', '');
+                        const hoursWorked = data.hours_worked || 0;
+                        const paymentAmount = (hoursWorked * 35).toFixed(2);
+                        
+                        completionDetails.textContent = `${clientName} - ${hoursWorked.toFixed(2)} hours - $${paymentAmount}`;
+                        completionMessage.style.display = 'block';
+                        
+                        // Hide the job details and disable further clock operations
+                        document.querySelector('.job-details').style.display = 'none';
+                        document.getElementById('clockInBtn').style.display = 'none';
+                        document.getElementById('clockOutBtn').style.display = 'none';
+                        
+                        // Auto-hide message after 5 seconds
+                        setTimeout(() => {
+                            completionMessage.style.display = 'none';
+                        }, 5000);
+                        
+                    } else if (data.error) {
+                        alert('Failed to clock out: ' + data.error);
+                    } else {
+                        alert('Failed to clock out.');
+                    }
+                })
+                .catch(() => alert('Failed to clock out.'));
+        });
+
+        // Generate invoice button functionality
+        function generateInvoice() {
+            window.location.href = '/invoices';
+        }
+    </script>
     <div class="comments-section">
         <label for="comments">Comments</label>
         <textarea id="comments" name="comments" placeholder="Enter comments here..."></textarea>

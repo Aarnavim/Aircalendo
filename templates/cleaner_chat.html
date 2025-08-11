@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <title>Cleaner Chat - AirCalendo</title>
+    <link href="https://fonts.googleapis.com/css2?family=Italiana&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/static/cleaner_chat.css" />
+</head>
+<body>
+    <header class="chat-header">
+        <div class="chat-title">{{ username }}</div>
+        <a href="/cleaner" class="home-button" title="Home">&#8962;</a>
+    </header>
+    <main class="chat-messages">
+        {% for msg in messages %}
+            {% if msg.sender == username %}
+                <div class="message owner-message">{{ msg.text }}</div>
+            {% else %}
+                <div class="message other-message">{{ msg.text }}</div>
+            {% endif %}
+        {% else %}
+            <div class="message other-message">No messages yet.</div>
+        {% endfor %}
+    </main>
+    <footer class="chat-input-area">
+        <form method="POST" action="{{ url_for('cleaner_chat_send') }}" style="display:flex; width: 100%;">
+            <input type="text" name="message" placeholder="Type your message..." required />
+            <button type="submit" class="send-button" title="Send">&#10148;</button>
+        </form>
+    </footer>
+</body>
+</html>

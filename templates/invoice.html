@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <title>Invoice - AirCalendo</title>
+    <link href="https://fonts.googleapis.com/css2?family=Italiana&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/static/invoice.css" />
+</head>
+<body>
+    <div class="invoice-container">
+        <header class="invoice-header">
+            <div class="address">10 Gardenia Grove, Norlane</div>
+            <div class="header-right">
+                {% if role == 'owner' %}
+                    <a href="/owner_dashboard" class="home-button" title="Home">&#8962;</a>
+                {% elif role == 'cleaner' %}
+                    <a href="/cleaner_dashboard" class="home-button" title="Home">&#8962;</a>
+                {% else %}
+                    <a href="/" class="home-button" title="Home">&#8962;</a>
+                {% endif %}
+                <img src="/static/aircalendo logo.png" alt="Aircalendo Logo" class="logo" />
+            </div>
+        </header>
+        {% if cleaners_attendance %}
+            {% for cleaner in cleaners_attendance %}
+                <section class="invoice-details">
+                    <div class="left-details">
+                        <p class="name">{{ cleaner.cleaner_username }}</p>
+                        <p class="id">##########</p>
+                        <p class="date">DD/MM/YYYY</p>
+                        <p class="invoice-number">Invoice - 32</p>
+                        <p class="invoice-id">##########</p>
+                        <p class="invoice-date">DD/MM/YYYY</p>
+                    </div>
+                    <div class="right-details">
+                        <p class="name">XYZ XYZ</p>
+                        <p class="id">##########</p>
+                        <p class="date">DD/MM/YYYY</p>
+                    </div>
+                </section>
+                <section class="invoice-summary-box">
+                    {% set total_earnings = 0 %}
+                    {% for record in cleaner.attendance_records %}
+                        {% set total_earnings = total_earnings + record.earning %}
+                        <p>{{ record.clock_in.strftime('%A, %m/%d/%Y') }} : {{ "%.2f"|format(record.hours_worked) }} hours <span class="price">${{ "%.2f"|format(record.earning) }}</span></p>
+                    {% endfor %}
+                    <hr />
+                    <p><strong>Total Earnings:</strong> <span class="price">${{ "%.2f"|format(total_earnings) }}</span></p>
+                </section>
+            {% endfor %}
+        {% else %}
+            <section class="invoice-details">
+                <div class="left-details">
+                    <p class="name">Supriti Malhotra</p>
+                    <p class="id">##########</p>
+                    <p class="date">DD/MM/YYYY</p>
+                    <p class="invoice-number">Invoice - 32</p>
+                    <p class="invoice-id">##########</p>
+                    <p class="invoice-date">DD/MM/YYYY</p>
+                </div>
+                <div class="right-details">
+                    <p class="name">XYZ XYZ</p>
+                    <p class="id">##########</p>
+                    <p class="date">DD/MM/YYYY</p>
+                </div>
+            </section>
+            <section class="invoice-summary-box">
+                    {% set total_earnings = 0 %}
+                    {% for record in attendance_records %}
+                        {% set total_earnings = total_earnings + record.earning %}
+                        <p>{{ record.clock_in.strftime('%A, %m/%d/%Y') }} : {{ "%.2f"|format(record.hours_worked) }} hours <span class="price">${{ "%.2f"|format(record.earning) }}</span></p>
+                    {% endfor %}
+                    <hr />
+                    <p><strong>Total Earnings:</strong> <span class="price">${{ "%.2f"|format(total_earnings) }}</span></p>
+            </section>
+        {% endif %}
+    </div>
+</body>
+</html>

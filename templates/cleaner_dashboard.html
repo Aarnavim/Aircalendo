@@ -5,12 +5,20 @@
     <title>Cleaner Dashboard - AirCalendo</title>
     <link href="https://fonts.googleapis.com/css2?family=Italiana&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="/static/cleaner_dashboard.css" />
+    <link rel="stylesheet" href="/static/cleaner_chat_button.css" />
 </head>
 <body>
     <header class="dashboard-header">
         <h1>Welcome, {{ username }}</h1>
         <div class="header-icons">
-            <span class="icon chat-icon" title="Chat">&#128172;</span>
+            <a href="/cleaner/chat" class="chat-button" title="Chat" aria-label="Chat">
+                <svg xmlns="http://www.w3.org/2000/svg" class="chat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="24" height="24">
+                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2z"></path>
+                    <line x1="8" y1="10" x2="8" y2="10"></line>
+                    <line x1="12" y1="10" x2="12" y2="10"></line>
+                    <line x1="16" y1="10" x2="16" y2="10"></line>
+                </svg>
+            </a>
             <span class="icon notification-icon" title="Notifications">&#128276;<sup class="notification-count">1</sup></span>
             <span class="icon profile-icon" title="Profile">&#128100;</span>
         </div>
@@ -30,6 +38,7 @@
         <a href="/bookings" class="footer-icon" title="Bookings">&#128221;</a>
         <a href="/clock" class="footer-icon" title="Clock">&#128337;</a>
         <a href="/calendar" class="footer-icon" title="Calendar">&#128197;</a>
+        <a href="/change_password" class="footer-icon" title="Change Password">&#128274;</a>
     </footer>
 </body>
 </html>
