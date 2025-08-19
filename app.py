@@ -1,5 +1,8 @@
-<<<<<<< HEAD
 from flask import Flask, render_template, request, redirect, url_for, session, g, jsonify
+import sqlite3
+import os
+from datetime import datetime, timedelta
+from calendar import monthrange, month_name
 
 app = Flask(__name__)
 app.secret_key = 'aircalendo_secret_key'
@@ -20,25 +23,6 @@ def close_connection(exception):
     if db is not None:
         db.close()
 
-# ------------------------
-# ROUTES
-# ------------------------
-
-@app.route('/debug/completed_jobs')
-def debug_completed_jobs():
-    if 'username' not in session:
-        return jsonify({'error': 'Unauthorized'}), 401
-    conn = get_db()
-    c = conn.cursor()
-    c.execute("SELECT * FROM completed_jobs")
-    rows = c.fetchall()
-    columns = [desc[0] for desc in c.description]
-    jobs = []
-    for row in rows:
-        job = dict(zip(columns, row))
-        jobs.append(job)
-    return jsonify(jobs)
-=======
 from flask import Flask, render_template, request, redirect, url_for, session, g
 import sqlite3
 import os
@@ -84,33 +68,49 @@ def login():
 
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT id, role FROM users WHERE username=? AND password=?", (username, password))
+    
+    # First check if username exists
+    cursor.execute("SELECT id, role, password FROM users WHERE username=?", (username,))
     user = cursor.fetchone()
-
-    if user:
-        session['user_id'] = user[0]
-        session['username'] = username
-        session['role'] = user[1]
-
-        if user[1] == 'owner':
-            return redirect(url_for('owner_dashboard'))
-        elif user[1] == 'cleaner':
-            return redirect(url_for('cleaner_dashboard'))
-    else:
+    
+    if not user:
+        # Username doesn't exist
         return render_template('login.html', error="Invalid username or password")
+    
+    # Username exists, check password
+    stored_password = user[2]
+    if password != stored_password:
+        # Wrong password
+        return render_template('login.html', error="incorrect password, please try again")
+    
+    # Both username and password are correct
+    session['user_id'] = user[0]
+    session['username'] = username
+    session['role'] = user[1]
+
+    if user[1] == 'owner':
+        return redirect(url_for('owner_dashboard'))
+    elif user[1] == 'cleaner':
+        return redirect(url_for('cleaner_dashboard'))
 
 @app.route('/logout')
 def logout():
     session.clear()
     return redirect(url_for('home'))
 
-@app.route('/owner')
+@app.route('/owner_dashboard')
 def owner_dashboard():
     if session.get('role') == 'owner':
         return render_template('owner_dashboard.html', username=session.get('username'))
     return redirect(url_for('home'))
 
-@app.route('/cleaner')
+@app.route('/cleaner_button')
+def cleaner_button():
+    if session.get('role') == 'owner':
+        return render_template('cleaner_button.html')
+    return redirect(url_for('home'))
+
+@app.route('/cleaner_dashboard')
 def cleaner_dashboard():
     if session.get('role') == 'cleaner':
         conn = get_db()
@@ -295,6 +295,21 @@ def invoices():
     today = datetime.now().date()
     week_ago = today - timedelta(days=7)
 
+    # Calculate total hours worked for the week for the logged-in user
+    if role in ['owner', 'cleaner']:
+        c.execute('''
+            SELECT COALESCE(SUM(hours_worked), 0) FROM attendance
+            WHERE user_id = ? AND clock_in BETWEEN ? AND ?
+        ''', (session['user_id'], week_ago.isoformat() + " 00:00:00", today.isoformat() + " 23:59:59"))
+        total_hours_worked = c.fetchone()[0] or 0
+        print(f"DEBUG: total_hours_worked for user {session['username']} is {total_hours_worked}")
+    else:
+        total_hours_worked = 0
+
+    hourly_rate = 35
+    total_earnings = total_hours_worked * hourly_rate
+    print(f"DEBUG: total_earnings calculated as {total_earnings}")
+
     if role == 'cleaner':
         # Get bookings for the cleaner in the last 7 days
         c.execute('''
@@ -307,13 +322,16 @@ def invoices():
         invoice_data = []
         for booking in bookings:
             booking_id, client_name, date_str, time_str = booking
-            # Sum hours worked on this booking date from attendance
+            # Sum hours worked on this booking date from attendance using BETWEEN for clock_in timestamps
+            start_datetime = date_str + " 00:00:00"
+            end_datetime = date_str + " 23:59:59"
             c.execute('''
                 SELECT COALESCE(SUM(hours_worked), 0) FROM attendance
-                WHERE username=? AND DATE(clock_in)=?
-            ''', (session['username'], date_str))
+                WHERE LOWER(username)=LOWER(?) AND clock_in BETWEEN ? AND ?
+            ''', (session['username'], start_datetime, end_datetime))
             hours_worked = c.fetchone()[0] or 0
-            earning = hours_worked * 35
+            earning = hours_worked * hourly_rate
+            print(f"Booking {booking_id} on {date_str}: hours_worked={hours_worked}, earning={earning}")
             invoice_data.append({
                 'client_name': client_name,
                 'date': date_str,
@@ -321,12 +339,22 @@ def invoices():
                 'hours_worked': hours_worked,
                 'earning': earning
             })
-        return render_template('invoice.html', username=session['username'], invoice_data=invoice_data)
+        print(f"Total earnings calculated: {total_earnings}")
+        return render_template('invoice.html', username=session['username'], invoice_data=invoice_data, role=session.get('role'), total_hours_worked=total_hours_worked, total_earnings=total_earnings)
 
     elif role == 'owner':
         # Get all cleaners
         c.execute("SELECT username FROM users WHERE role='cleaner'")
         cleaners = [row[0] for row in c.fetchall()]
+
+        # Calculate total hours worked by all cleaners in last 7 days
+        c.execute('''
+            SELECT COALESCE(SUM(hours_worked), 0) FROM attendance
+            WHERE clock_in BETWEEN ? AND ?
+        ''', (week_ago.isoformat() + " 00:00:00", today.isoformat() + " 23:59:59"))
+        total_hours_all_cleaners = c.fetchone()[0] or 0
+        total_earnings = total_hours_all_cleaners * hourly_rate
+        print(f"DEBUG: total_hours_all_cleaners = {total_hours_all_cleaners}, total_earnings = {total_earnings}")
 
         cleaners_invoice = []
         for cleaner_username in cleaners:
@@ -341,12 +369,15 @@ def invoices():
             invoice_data = []
             for booking in bookings:
                 booking_id, client_name, date_str, time_str = booking
+                start_datetime = date_str + " 00:00:00"
+                end_datetime = date_str + " 23:59:59"
                 c.execute('''
                     SELECT COALESCE(SUM(hours_worked), 0) FROM attendance
-                    WHERE username=? AND DATE(clock_in)=?
-                ''', (cleaner_username, date_str))
+                    WHERE LOWER(username)=LOWER(?) AND clock_in BETWEEN ? AND ?
+                ''', (cleaner_username, start_datetime, end_datetime))
                 hours_worked = c.fetchone()[0] or 0
-                earning = hours_worked * 35
+                earning = hours_worked * hourly_rate
+                print(f"Cleaner {cleaner_username} Booking {booking_id} on {date_str}: hours_worked={hours_worked}, earning={earning}")
                 invoice_data.append({
                     'client_name': client_name,
                     'date': date_str,
@@ -358,7 +389,8 @@ def invoices():
                 'cleaner_username': cleaner_username,
                 'invoice_data': invoice_data
             })
-        return render_template('invoice.html', username=session['username'], cleaners_invoice=cleaners_invoice)
+        print(f"Total earnings calculated for owner: {total_earnings}")
+        return render_template('invoice.html', username=session['username'], cleaners_invoice=cleaners_invoice, role=session.get('role'), total_hours_worked=total_hours_all_cleaners, total_earnings=total_earnings)
 
     return redirect(url_for('home'))
 
@@ -675,4 +707,3 @@ def cleaner_chat_send():
 if __name__ == '__main__':
     init_db()
     app.run(debug=True)
->>>>>>> 3800803d0c10258fe8e6ef10dd5dd8f4ad38901a

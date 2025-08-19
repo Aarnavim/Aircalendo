@@ -1,0 +1,75 @@
+body {
+    font-family: 'Aptos', sans-serif;
+    background-color: white;
+    margin: 0;
+    padding: 0;
+}
+
+.cleaner-container {
+    width: 600px;
+    border: 1px solid black;
+    margin: 20px auto;
+    background-color: white;
+}
+
+.cleaner-header {
+    background-color: #f7a89c; /* Peach pink */
+    color: black;
+    font-family: 'Italiana', serif;
+    font-size: 24px;
+    padding: 10px 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.profile-pic {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+}
+
+.cleaner-content {
+    display: flex;
+    padding: 20px;
+}
+
+.left-section {
+    flex: 1;
+    padding-right: 20px;
+}
+
+.stars {
+    font-size: 24px;
+    color: gold;
+    margin-bottom: 15px;
+}
+
+.review-box {
+    font-size: 15px;
+    background-color: #d3d3d3;
+    padding: 15px;
+    border-radius: 5px;
+    font-family: 'Aptos', sans-serif;
+}
+
+.right-section {
+    flex: 1;
+    font-family: 'Aptos', sans-serif;
+    font-size: 16px;
+    color: black;
+}
+
+.right-section h2 {
+    margin-top: 0;
+    font-family: 'Italiana', serif;
+}
+
+.home-button {
+    display: block;
+    margin: 20px auto;
+    font-size: 24px;
+    color: black;
+    text-align: center;
+    text-decoration: none;
+}
