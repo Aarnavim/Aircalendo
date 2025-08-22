@@ -1,33 +1,35 @@
-from flask import Flask, render_template, request, redirect, url_for, session, g, jsonify
+"""
+Aircalendo Cleaning Service Management System
+
+This Flask application provides a comprehensive platform for managing cleaning services,
+including booking management, attendance tracking, invoicing, and real-time chat functionality.
+
+Key Features:
+- User authentication with role-based access (owner/cleaner)
+- Booking management system with calendar integration
+- Clock-in/clock-out attendance tracking
+- Automated invoice generation based on hours worked
+- Real-time chat system for communication
+- Profile management for cleaners
+- Responsive web interface
+
+Database Schema:
+- users: User authentication and role management
+- attendance: Clock-in/out records with hours calculation
+- bookings: Client booking information
+- cleaner_profiles: Cleaner personal and availability information
+
+Author: Aircalendo Development Team
+Version: 1.0.0
+"""
+
+from flask import Flask, render_template, request, redirect, url_for, session, g, jsonify, flash
 import sqlite3
 import os
 from datetime import datetime, timedelta
 from calendar import monthrange, month_name
 
-app = Flask(__name__)
-app.secret_key = 'aircalendo_secret_key'
-DATABASE = 'users.db'
-
-# ------------------------
-# DATABASE CONNECTION
-# ------------------------
-
-def get_db():
-    if '_database' not in g:
-        g._database = sqlite3.connect(DATABASE, check_same_thread=False)
-    return g._database
-
-@app.teardown_appcontext
-def close_connection(exception):
-    db = g.pop('_database', None)
-    if db is not None:
-        db.close()
-
-from flask import Flask, render_template, request, redirect, url_for, session, g
-import sqlite3
-import os
-from datetime import datetime
-
+# Application Configuration
 app = Flask(__name__)
 app.secret_key = 'aircalendo_secret_key'
 DATABASE = 'users.db'
@@ -51,7 +53,50 @@ def close_connection(exception):
 # DATABASE SETUP
 # ------------------------
 
-# Removed update_user_credentials function to avoid undefined reference error
+def init_db():
+    if not os.path.exists(DATABASE):
+        with sqlite3.connect(DATABASE) as conn:
+            c = conn.cursor()
+            c.execute('''
+                CREATE TABLE users (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    username TEXT NOT NULL UNIQUE,
+                    password TEXT NOT NULL,
+                    role TEXT CHECK(role IN ('owner', 'cleaner')) NOT NULL
+                )
+            ''')
+            c.execute('''
+                CREATE TABLE attendance (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER,
+                    username TEXT,
+                    clock_in TIMESTAMP,
+                    clock_out TIMESTAMP,
+                    hours_worked REAL DEFAULT 0
+                )
+            ''')
+            c.execute('''
+                CREATE TABLE bookings (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    client_name TEXT,
+                    date TEXT,
+                    time TEXT,
+                    location TEXT,
+                    cleaner TEXT
+                )
+            ''')
+            c.execute('''
+                CREATE TABLE cleaner_profiles (
+                    user_id INTEGER PRIMARY KEY,
+                    name TEXT,
+                    phone TEXT,
+                    availability TEXT
+                )
+            ''')
+            c.execute("INSERT INTO users (username, password, role) VALUES (?, ?, ?)", ("Supriti", "Owner@gardenia", "owner"))
+            c.execute("INSERT INTO users (username, password, role) VALUES (?, ?, ?)", ("CleanerM@AC", "Cleaner@AC", "cleaner"))
+            conn.commit()
+            print("Database initialized.")
 
 # ------------------------
 # ROUTES
@@ -122,8 +167,10 @@ def cleaner_dashboard():
         return render_template('cleaner_dashboard.html', username=session['username'], jobs=jobs)
     return redirect(url_for('home'))
 
-from calendar import monthrange, month_name
-from datetime import date as dt_date
+@app.route('/cleaner')
+def cleaner():
+    """Alias route for cleaner dashboard"""
+    return redirect(url_for('cleaner_dashboard'))
 
 @app.route('/calendar')
 def calendar():
@@ -131,7 +178,7 @@ def calendar():
         # Get month and year from query parameters or default to current
         month = request.args.get('month', default=None, type=int)
         year = request.args.get('year', default=None, type=int)
-        today = dt_date.today()
+        today = datetime.today().date()
         if not month or not year:
             month = today.month
             year = today.year
@@ -179,7 +226,6 @@ def calendar():
                                    bookings=bookings_by_date, weeks=weeks, month=month, year=year, month_name=month_name_str)
     return redirect(url_for('home'))
 
-
 @app.route('/booking/<int:booking_id>')
 def booking_detail(booking_id):
     if session.get('role') not in ['owner', 'cleaner']:
@@ -210,7 +256,8 @@ def edit_booking(booking_id):
             WHERE id=?
         ''', (client, date, time, location, cleaner, booking_id))
         conn.commit()
-        return redirect(url_for('booking_detail', booking_id=booking_id))
+        flash('Changes saved successfully!', 'success')
+        return redirect(url_for('owner_bookings'))
     else:
         c.execute("SELECT client_name, date, time, location, cleaner FROM bookings WHERE id=?", (booking_id,))
         booking = c.fetchone()
@@ -228,18 +275,6 @@ def delete_booking(booking_id):
     conn.commit()
     return redirect(url_for('bookings'))
 
-@app.route('/clock')
-def clock():
-    if session.get('role') == 'owner':
-        return render_template('clock.html', username=session['username'], role=session['role'])
-    elif session.get('role') == 'cleaner':
-        conn = get_db()
-        c = conn.cursor()
-        c.execute("SELECT client_name, date, time FROM bookings WHERE cleaner=? AND date >= date('now') ORDER BY date ASC LIMIT 1", (session['username'],))
-        upcoming_booking = c.fetchone()
-        return render_template('cleaner_clock.html', username=session['username'], role=session['role'], booking=upcoming_booking)
-    return redirect(url_for('home'))
-
 @app.route('/clockin')
 def clock_in():
     if session.get('role') in ['owner', 'cleaner']:
@@ -250,8 +285,6 @@ def clock_in():
         conn.commit()
         return redirect(url_for('clock'))
     return redirect(url_for('home'))
-
-from flask import jsonify
 
 @app.route('/clockout')
 def clock_out():
@@ -285,114 +318,213 @@ def clock_out():
             return jsonify({'error': f'Failed to clock out: {e}'}), 500
     return redirect(url_for('home'))
 
-from datetime import timedelta
+@app.route('/clock')
+def clock():
+    """Clock page for cleaners to clock in/out"""
+    if session.get('role') not in ['owner', 'cleaner']:
+        return redirect(url_for('home'))
+    
+    conn = get_db()
+    c = conn.cursor()
+    
+    # Get current booking for the logged-in user
+    if session.get('role') == 'cleaner':
+        c.execute("SELECT client_name, date, time FROM bookings WHERE cleaner=? ORDER BY date DESC LIMIT 1", 
+                 (session['username'],))
+    else:
+        c.execute("SELECT client_name, date, time FROM bookings ORDER BY date DESC LIMIT 1")
+    
+    booking = c.fetchone()
+    
+    return render_template('cleaner_clock.html', booking=booking, username=session['username'])
 
 @app.route('/invoices')
 def invoices():
-    role = session.get('role')
-    conn = get_db()
-    c = conn.cursor()
-    today = datetime.now().date()
-    week_ago = today - timedelta(days=7)
-
-    # Calculate total hours worked for the week for the logged-in user
-    if role in ['owner', 'cleaner']:
-        c.execute('''
-            SELECT COALESCE(SUM(hours_worked), 0) FROM attendance
-            WHERE user_id = ? AND clock_in BETWEEN ? AND ?
-        ''', (session['user_id'], week_ago.isoformat() + " 00:00:00", today.isoformat() + " 23:59:59"))
-        total_hours_worked = c.fetchone()[0] or 0
-        print(f"DEBUG: total_hours_worked for user {session['username']} is {total_hours_worked}")
-    else:
+    try:
+        role = session.get('role')
+        if not role:
+            return redirect(url_for('home'))
+            
+        conn = get_db()
+        c = conn.cursor()
+        today = datetime.now().date()
+        week_ago = today - timedelta(days=7)
+        
+        # Ensure username is available
+        username = session.get('username', 'User')
+        
+        # Initialize default values
         total_hours_worked = 0
-
-    hourly_rate = 35
-    total_earnings = total_hours_worked * hourly_rate
-    print(f"DEBUG: total_earnings calculated as {total_earnings}")
-
-    if role == 'cleaner':
-        # Get bookings for the cleaner in the last 7 days
-        c.execute('''
-            SELECT id, client_name, date, time FROM bookings
-            WHERE cleaner=? AND date BETWEEN ? AND ?
-            ORDER BY date DESC
-        ''', (session['username'], week_ago.isoformat(), today.isoformat()))
-        bookings = c.fetchall()
-
+        total_earnings = 0
         invoice_data = []
-        for booking in bookings:
-            booking_id, client_name, date_str, time_str = booking
-            # Sum hours worked on this booking date from attendance using BETWEEN for clock_in timestamps
-            start_datetime = date_str + " 00:00:00"
-            end_datetime = date_str + " 23:59:59"
-            c.execute('''
-                SELECT COALESCE(SUM(hours_worked), 0) FROM attendance
-                WHERE LOWER(username)=LOWER(?) AND clock_in BETWEEN ? AND ?
-            ''', (session['username'], start_datetime, end_datetime))
-            hours_worked = c.fetchone()[0] or 0
-            earning = hours_worked * hourly_rate
-            print(f"Booking {booking_id} on {date_str}: hours_worked={hours_worked}, earning={earning}")
-            invoice_data.append({
-                'client_name': client_name,
-                'date': date_str,
-                'time': time_str,
-                'hours_worked': hours_worked,
-                'earning': earning
-            })
-        print(f"Total earnings calculated: {total_earnings}")
-        return render_template('invoice.html', username=session['username'], invoice_data=invoice_data, role=session.get('role'), total_hours_worked=total_hours_worked, total_earnings=total_earnings)
-
-    elif role == 'owner':
-        # Get all cleaners
-        c.execute("SELECT username FROM users WHERE role='cleaner'")
-        cleaners = [row[0] for row in c.fetchall()]
-
-        # Calculate total hours worked by all cleaners in last 7 days
-        c.execute('''
-            SELECT COALESCE(SUM(hours_worked), 0) FROM attendance
-            WHERE clock_in BETWEEN ? AND ?
-        ''', (week_ago.isoformat() + " 00:00:00", today.isoformat() + " 23:59:59"))
-        total_hours_all_cleaners = c.fetchone()[0] or 0
-        total_earnings = total_hours_all_cleaners * hourly_rate
-        print(f"DEBUG: total_hours_all_cleaners = {total_hours_all_cleaners}, total_earnings = {total_earnings}")
-
         cleaners_invoice = []
-        for cleaner_username in cleaners:
-            # Get bookings for cleaner in last 7 days
-            c.execute('''
-                SELECT id, client_name, date, time FROM bookings
-                WHERE cleaner=? AND date BETWEEN ? AND ?
-                ORDER BY date DESC
-            ''', (cleaner_username, week_ago.isoformat(), today.isoformat()))
-            bookings = c.fetchall()
-
-            invoice_data = []
-            for booking in bookings:
-                booking_id, client_name, date_str, time_str = booking
-                start_datetime = date_str + " 00:00:00"
-                end_datetime = date_str + " 23:59:59"
+        hourly_rate = 35
+        
+        # Calculate total hours worked for the week
+        if role in ['owner', 'cleaner']:
+            try:
                 c.execute('''
                     SELECT COALESCE(SUM(hours_worked), 0) FROM attendance
-                    WHERE LOWER(username)=LOWER(?) AND clock_in BETWEEN ? AND ?
-                ''', (cleaner_username, start_datetime, end_datetime))
-                hours_worked = c.fetchone()[0] or 0
-                earning = hours_worked * hourly_rate
-                print(f"Cleaner {cleaner_username} Booking {booking_id} on {date_str}: hours_worked={hours_worked}, earning={earning}")
-                invoice_data.append({
-                    'client_name': client_name,
-                    'date': date_str,
-                    'time': time_str,
-                    'hours_worked': hours_worked,
-                    'earning': earning
-                })
-            cleaners_invoice.append({
-                'cleaner_username': cleaner_username,
-                'invoice_data': invoice_data
-            })
-        print(f"Total earnings calculated for owner: {total_earnings}")
-        return render_template('invoice.html', username=session['username'], cleaners_invoice=cleaners_invoice, role=session.get('role'), total_hours_worked=total_hours_all_cleaners, total_earnings=total_earnings)
+                    WHERE user_id = ? AND clock_in BETWEEN ? AND ?
+                ''', (session['user_id'], week_ago.isoformat() + " 00:00:00", today.isoformat() + " 23:59:59"))
+                result = c.fetchone()
+                total_hours_worked = result[0] if result and result[0] is not None else 0
+            except Exception as e:
+                print(f"Error calculating hours: {e}")
+                total_hours_worked = 0
+        
+        total_earnings = total_hours_worked * hourly_rate
+        
+        if role == 'cleaner':
+            try:
+                # Get bookings for the cleaner
+                c.execute('''
+                    SELECT id, client_name, date, time FROM bookings
+                    WHERE cleaner=? AND date BETWEEN ? AND ?
+                    ORDER BY date DESC
+                ''', (username, week_ago.isoformat(), today.isoformat()))
+                bookings = c.fetchall()
+                
+                invoice_data = []
+                for booking in bookings:
+                    booking_id, client_name, date_str, time_str = booking
+                    try:
+                        # Calculate hours for this specific date
+                        start_datetime = date_str + " 00:00:00"
+                        end_datetime = date_str + " 23:59:59"
+                        c.execute('''
+                            SELECT COALESCE(SUM(hours_worked), 0) FROM attendance
+                            WHERE LOWER(username)=LOWER(?) AND clock_in BETWEEN ? AND ?
+                        ''', (username, start_datetime, end_datetime))
+                        hours_result = c.fetchone()
+                        hours_worked = hours_result[0] if hours_result and hours_result[0] is not None else 0
+                        earning = hours_worked * hourly_rate
+                        
+                        invoice_data.append({
+                            'client_name': client_name or 'Unknown Client',
+                            'date': date_str or '',
+                            'time': time_str or '',
+                            'hours_worked': hours_worked,
+                            'earning': earning
+                        })
+                    except Exception as e:
+                        print(f"Error processing booking {booking_id}: {e}")
+                        invoice_data.append({
+                            'client_name': client_name or 'Unknown Client',
+                            'date': date_str or '',
+                            'time': time_str or '',
+                            'hours_worked': 0,
+                            'earning': 0
+                        })
+                        
+            except Exception as e:
+                print(f"Error getting cleaner bookings: {e}")
+                invoice_data = []
+                
+            return render_template('invoice.html', 
+                                 username=username, 
+                                 invoice_data=invoice_data, 
+                                 role=role, 
+                                 total_hours_worked=total_hours_worked, 
+                                 total_earnings=total_earnings)
 
-    return redirect(url_for('home'))
+        elif role == 'owner':
+            try:
+                # Get all cleaners
+                c.execute("SELECT username FROM users WHERE role='cleaner'")
+                cleaners = [row[0] for row in c.fetchall()]
+                
+                # Calculate total hours for all cleaners
+                try:
+                    c.execute('''
+                        SELECT COALESCE(SUM(hours_worked), 0) FROM attendance
+                        WHERE clock_in BETWEEN ? AND ?
+                    ''', (week_ago.isoformat() + " 00:00:00", today.isoformat() + " 23:59:59"))
+                    total_result = c.fetchone()
+                    total_hours_all_cleaners = total_result[0] if total_result and total_result[0] is not None else 0
+                except Exception as e:
+                    print(f"Error calculating total hours: {e}")
+                    total_hours_all_cleaners = 0
+                
+                total_earnings = total_hours_all_cleaners * hourly_rate
+                
+                cleaners_invoice = []
+                for cleaner_username in cleaners:
+                    try:
+                        # Get bookings for this cleaner
+                        c.execute('''
+                            SELECT id, client_name, date, time FROM bookings
+                            WHERE cleaner=? AND date BETWEEN ? AND ?
+                            ORDER BY date DESC
+                        ''', (cleaner_username, week_ago.isoformat(), today.isoformat()))
+                        bookings = c.fetchall()
+                        
+                        invoice_data = []
+                        for booking in bookings:
+                            booking_id, client_name, date_str, time_str = booking
+                            try:
+                                start_datetime = date_str + " 00:00:00"
+                                end_datetime = date_str + " 23:59:59"
+                                c.execute('''
+                                    SELECT COALESCE(SUM(hours_worked), 0) FROM attendance
+                                    WHERE LOWER(username)=LOWER(?) AND clock_in BETWEEN ? AND ?
+                                ''', (cleaner_username, start_datetime, end_datetime))
+                                hours_result = c.fetchone()
+                                hours_worked = hours_result[0] if hours_result and hours_result[0] is not None else 0
+                                earning = hours_worked * hourly_rate
+                                
+                                invoice_data.append({
+                                    'client_name': client_name or 'Unknown Client',
+                                    'date': date_str or '',
+                                    'time': time_str or '',
+                                    'hours_worked': hours_worked,
+                                    'earning': earning
+                                })
+                            except Exception as e:
+                                print(f"Error processing cleaner booking: {e}")
+                                invoice_data.append({
+                                    'client_name': client_name or 'Unknown Client',
+                                    'date': date_str or '',
+                                    'time': time_str or '',
+                                    'hours_worked': 0,
+                                    'earning': 0
+                                })
+                        
+                        if invoice_data:  # Only add cleaners with actual bookings
+                            cleaners_invoice.append({
+                                'cleaner_username': cleaner_username,
+                                'invoice_data': invoice_data,
+                                'total_hours': sum(b['hours_worked'] for b in invoice_data),
+                                'total_earnings': sum(b['earning'] for b in invoice_data)
+                            })
+                            
+                    except Exception as e:
+                        print(f"Error processing cleaner {cleaner_username}: {e}")
+                        
+            except Exception as e:
+                print(f"Error getting owner data: {e}")
+                cleaners_invoice = []
+                
+            return render_template('invoice.html', 
+                                 username=username, 
+                                 cleaners_invoice=cleaners_invoice, 
+                                 role=role, 
+                                 total_hours_worked=total_hours_all_cleaners, 
+                                 total_earnings=total_earnings)
+
+        return redirect(url_for('home'))
+        
+    except Exception as e:
+        print(f"Error in invoices route: {e}")
+        # Return a user-friendly error page
+        return render_template('invoice.html', 
+                             username=session.get('username', 'User'), 
+                             invoice_data=[], 
+                             cleaners_invoice=[], 
+                             role=session.get('role'), 
+                             total_hours_worked=0, 
+                             total_earnings=0, 
+                             error="Unable to load invoice data")
 
 @app.route('/cleaner/profile', methods=['GET', 'POST'])
 def cleaner_profile():
@@ -418,6 +550,14 @@ def cleaner_profile():
     c.execute("SELECT name, phone, availability FROM cleaner_profiles WHERE user_id=?", (session['user_id'],))
     profile = c.fetchone()
     return render_template('cleaner_profile.html', profile=profile, username=session['username'])
+
+@app.route('/cleaner/chat')
+def cleaner_chat():
+    """Chat page for cleaners to communicate"""
+    if session.get('role') not in ['owner', 'cleaner']:
+        return redirect(url_for('home'))
+    
+    return render_template('cleaner_chat.html', username=session['username'], messages=chat_messages)
 
 @app.route('/bookings')
 def bookings():
@@ -492,6 +632,16 @@ def owner_chat_send():
         chat_messages.append({'sender': session.get('username', 'Owner'), 'text': message})
     return redirect(url_for('owner_chat'))
 
+@app.route('/cleaner/chat/send', methods=['POST'])
+def cleaner_chat_send():
+    """Handle chat message sending for cleaners"""
+    if session.get('role') not in ['owner', 'cleaner']:
+        return redirect(url_for('home'))
+    message = request.form.get('message', '').strip()
+    if message:
+        chat_messages.append({'sender': session.get('username', 'User'), 'text': message})
+    return redirect(url_for('cleaner_chat'))
+
 @app.route('/change_password')
 def change_password_form():
     if 'user_id' not in session:
@@ -503,7 +653,7 @@ def change_password_form():
     user = cursor.fetchone()
     current_email = user[0] if user else ''
     
-    return render_template('change_password.html', current_email=current_email)
+    return render_template('change_password.html', current_email=current_email, role=session.get('role'))
 
 @app.route('/change_password', methods=['POST'])
 def change_password():
@@ -584,125 +734,6 @@ def change_password():
 # ------------------------
 # MAIN
 # ------------------------
-
-def init_db():
-    if not os.path.exists(DATABASE):
-        with sqlite3.connect(DATABASE) as conn:
-            c = conn.cursor()
-            c.execute('''
-                CREATE TABLE users (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    username TEXT NOT NULL UNIQUE,
-                    password TEXT NOT NULL,
-                    role TEXT CHECK(role IN ('owner', 'cleaner')) NOT NULL
-                )
-            ''')
-            c.execute('''
-                CREATE TABLE attendance (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    user_id INTEGER,
-                    username TEXT,
-                    clock_in TIMESTAMP,
-                    clock_out TIMESTAMP,
-                    hours_worked REAL DEFAULT 0
-                )
-            ''')
-            c.execute('''
-                CREATE TABLE bookings (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    client_name TEXT,
-                    date TEXT,
-                    time TEXT,
-                    location TEXT,
-                    cleaner TEXT
-                )
-            ''')
-            c.execute('''
-                CREATE TABLE cleaner_profiles (
-                    user_id INTEGER PRIMARY KEY,
-                    name TEXT,
-                    phone TEXT,
-                    availability TEXT
-                )
-            ''')
-            c.execute("INSERT INTO users (username, password, role) VALUES (?, ?, ?)", ("Supriti", "Owner@gardenia", "owner"))
-            c.execute("INSERT INTO users (username, password, role) VALUES (?, ?, ?)", ("CleanerM@AC", "Cleaner@AC", "cleaner"))
-            conn.commit()
-            print("Database initialized.")
-
-from flask import jsonify
-
-@app.route('/api/bookings')
-def api_bookings():
-    role = session.get('role')
-    username = session.get('username')
-    print(f"API /api/bookings called by user: {username} with role: {role}")
-    if role not in ['owner', 'cleaner']:
-        return jsonify({'error': 'Unauthorized'}), 401
-    conn = get_db()
-    c = conn.cursor()
-    if role == 'owner':
-        c.execute("SELECT * FROM bookings")
-    else:
-        c.execute("SELECT * FROM bookings WHERE cleaner=?", (username,))
-    bookings = c.fetchall()
-    print(f"Bookings fetched for user {username}: {bookings}")
-    bookings_list = []
-    for b in bookings:
-        booking_dict = {
-            'id': b[0],
-            'client_name': b[1],
-            'date': b[2],
-            'time': b[3],
-            'location': b[4],
-            'cleaner': b[5]
-        }
-        bookings_list.append(booking_dict)
-    return jsonify(bookings_list)
-
-@app.route('/api/total_hours')
-def total_hours():
-    if session.get('role') != 'cleaner':
-        return jsonify({'error': 'Unauthorized'}), 401
-    
-    conn = get_db()
-    c = conn.cursor()
-    
-    # Get total hours worked by the logged-in cleaner
-    c.execute('''
-        SELECT COALESCE(SUM(hours_worked), 0) as total_hours 
-        FROM attendance 
-        WHERE user_id = ?
-    ''', (session['user_id'],))
-    
-    result = c.fetchone()
-    total_hours = result[0] if result else 0
-    
-    return jsonify({'total_hours': round(total_hours, 2)})
-
-@app.route('/cleaner_chat_button')
-def cleaner_chat_button():
-    if session.get('role') == 'cleaner':
-        return render_template('cleaner_chat_button.html')
-    return redirect(url_for('home'))
-
-# In-memory message store for cleaner chat
-cleaner_chat_messages = []
-
-@app.route('/cleaner/chat')
-def cleaner_chat():
-    if session.get('role') != 'cleaner':
-        return redirect(url_for('home'))
-    return render_template('cleaner_chat.html', username=session.get('username', 'Cleaner'), messages=cleaner_chat_messages)
-
-@app.route('/cleaner/chat/send', methods=['POST'])
-def cleaner_chat_send():
-    if session.get('role') != 'cleaner':
-        return redirect(url_for('home'))
-    message = request.form.get('message', '').strip()
-    if message:
-        cleaner_chat_messages.append({'sender': session.get('username', 'Cleaner'), 'text': message})
-    return redirect(url_for('cleaner_chat'))
 
 if __name__ == '__main__':
     init_db()

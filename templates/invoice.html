@@ -22,79 +22,94 @@
             </div>
         </header>
 
-        {% if role == 'owner' and cleaners_invoice %}
+        {% if error %}
+            <section class="invoice-summary-box">
+                <p style="color: red; text-align: center; font-weight: bold;">{{ error }}</p>
+                <p style="text-align: center;">No invoice data available at this time.</p>
+            </section>
+        {% elif role == 'owner' and cleaners_invoice %}
             {% for cleaner in cleaners_invoice %}
-                <section class="invoice-details">
-                    <div class="left-details">
-                        <p class="name">{{ cleaner.cleaner_username }}</p>
-                        <p class="id">CL-{{ cleaner.cleaner_username[:3].upper() }}-{{ loop.index }}</p>
-                        <p class="date">{{ cleaner.invoice_data[0].date if cleaner.invoice_data else '' }}</p>
-                        <p class="invoice-number">Invoice - {{ loop.index }}</p>
-                        <p class="invoice-id">INV-{{ "%05d"|format(loop.index) }}</p>
-                        <p class="invoice-date">{{ '' }}</p>
-                    </div>
-                    <div class="right-details">
-                        <p class="name">AirCalendo</p>
-                        <p class="id">AC-001</p>
-                        <p class="date">{{ '' }}</p>
-                    </div>
-                </section>
-                <section class="invoice-summary-box">
-                    {% set total_earnings = 0 %}
-                    {% for record in cleaner.invoice_data %}
-                        {% set total_earnings = total_earnings + record.earning %}
-                        <p>{{ record.date }} : {{ "%.2f"|format(record.hours_worked) }} hours <span class="price">${{ "%.2f"|format(record.earning) }}</span></p>
-                    {% endfor %}
-                    <hr />
-                    <p><strong>Total Earnings:</strong> <span class="price">${{ "%.2f"|format(total_earnings) }}</span></p>
-                </section>
+                {% if cleaner.invoice_data %}
+                    <section class="invoice-details">
+                        <div class="left-details">
+                            <p class="name">{{ cleaner.cleaner_username or 'Unknown Cleaner' }}</p>
+                            <p class="id">CL-{{ (cleaner.cleaner_username or 'XXX')[:3].upper() }}-{{ loop.index }}</p>
+                            <p class="date">{{ cleaner.invoice_data[0].date if cleaner.invoice_data and cleaner.invoice_data[0].date else 'N/A' }}</p>
+                            <p class="invoice-number">Invoice - {{ loop.index }}</p>
+                            <p class="invoice-id">INV-{{ "%05d"|format(loop.index) }}</p>
+                            <p class="invoice-date">{{ cleaner.invoice_data[0].date if cleaner.invoice_data and cleaner.invoice_data[0].date else '' }}</p>
+                        </div>
+                        <div class="right-details">
+                            <p class="name">AirCalendo</p>
+                            <p class="id">AC-001</p>
+                            <p class="date">{{ cleaner.invoice_data[0].date if cleaner.invoice_data and cleaner.invoice_data[0].date else '' }}</p>
+                        </div>
+                    </section>
+                    <section class="invoice-summary-box">
+                        {% set total_earnings = namespace(value=0) %}
+                        {% for record in cleaner.invoice_data %}
+                            {% set total_earnings.value = total_earnings.value + (record.earning or 0) %}
+                            <p>{{ record.date or 'N/A' }} : {{ "%.2f"|format(record.hours_worked or 0) }} hours <span class="price">${{ "%.2f"|format(record.earning or 0) }}</span></p>
+                        {% endfor %}
+                        <hr />
+                        <p><strong>Total Earnings:</strong> <span class="price">${{ "%.2f"|format(total_earnings.value) }}</span></p>
+                    </section>
+                {% endif %}
             {% endfor %}
+            {% if not cleaners_invoice %}
+                <section class="invoice-summary-box">
+                    <p style="text-align: center;">No invoice data available for any cleaners.</p>
+                    <p style="text-align: center;">Total hours worked this week: {{ "%.2f"|format(total_hours_worked or 0) }}</p>
+                    <hr />
+                    <p><strong>Total Earnings:</strong> <span class="price">${{ "%.2f"|format(total_earnings or 0) }}</span></p>
+                </section>
+            {% endif %}
         {% elif role == 'cleaner' and invoice_data %}
             <section class="invoice-details">
                 <div class="left-details">
-                    <p class="name">{{ username }}</p>
-                    <p class="id">CL-{{ username[:3].upper() }}-001</p>
-                    <p class="date">{{ invoice_data[0].date if invoice_data else '' }}</p>
+                    <p class="name">{{ username or 'User' }}</p>
+                    <p class="id">CL-{{ (username or 'XXX')[:3].upper() }}-001</p>
+                    <p class="date">{{ invoice_data[0].date if invoice_data and invoice_data[0].date else 'N/A' }}</p>
                     <p class="invoice-number">Invoice - 1</p>
                     <p class="invoice-id">INV-00001</p>
-                    <p class="invoice-date">{{ '' }}</p>
+                    <p class="invoice-date">{{ invoice_data[0].date if invoice_data and invoice_data[0].date else '' }}</p>
                 </div>
                 <div class="right-details">
                     <p class="name">AirCalendo</p>
                     <p class="id">AC-001</p>
-                    <p class="date">{{ '' }}</p>
+                    <p class="date">{{ invoice_data[0].date if invoice_data and invoice_data[0].date else '' }}</p>
                 </div>
             </section>
             <section class="invoice-summary-box">
-                {% set total_earnings = 0 %}
+                {% set total_earnings = namespace(value=0) %}
                 {% for record in invoice_data %}
-                    {% set total_earnings = total_earnings + record.earning %}
-                    <p>{{ record.date }} : {{ "%.2f"|format(record.hours_worked) }} hours <span class="price">${{ "%.2f"|format(record.earning) }}</span></p>
+                    {% set total_earnings.value = total_earnings.value + (record.earning or 0) %}
+                    <p>{{ record.date or 'N/A' }} : {{ "%.2f"|format(record.hours_worked or 0) }} hours <span class="price">${{ "%.2f"|format(record.earning or 0) }}</span></p>
                 {% endfor %}
                 <hr />
-                <p><strong>Total Earnings:</strong> <span class="price">${{ "%.2f"|format(total_earnings) }}</span></p>
+                <p><strong>Total Earnings:</strong> <span class="price">${{ "%.2f"|format(total_earnings.value) }}</span></p>
             </section>
         {% else %}
-            {% set total_earnings = 0 %}
             <section class="invoice-details">
                 <div class="left-details">
-                    <p class="name">{{ username }}</p>
+                    <p class="name">{{ username or 'User' }}</p>
                     <p class="id">CL-001</p>
-                    <p class="date"></p>
+                    <p class="date">N/A</p>
                     <p class="invoice-number">Invoice - 1</p>
                     <p class="invoice-id">INV-00001</p>
-                    <p class="invoice-date"></p>
+                    <p class="invoice-date">N/A</p>
                 </div>
                 <div class="right-details">
                     <p class="name">AirCalendo</p>
                     <p class="id">AC-001</p>
-                    <p class="date"></p>
+                    <p class="date">N/A</p>
                 </div>
             </section>
             <section class="invoice-summary-box">
-                <p>Total hours worked this week: {{ "%.2f"|format(total_hours_worked) }}</p>
+                <p style="text-align: center;">No invoice data available.</p>
+                <p>Total hours worked this week: {{ "%.2f"|format(total_hours_worked or 0) }}</p>
                 <hr />
-                <p><strong>Total Earnings:</strong> <span class="price">${{ "%.2f"|format(total_earnings) }}</span></p>
+                <p><strong>Total Earnings:</strong> <span class="price">${{ "%.2f"|format(total_earnings or 0) }}</span></p>
             </section>
         {% endif %}
     </div>

@@ -1,3 +1,4 @@
+/* Cleaner Dashboard CSS Stylesheet - The visual style for the cleaner dashboard page */
 body {
     font-family: 'Italiana', serif;
     background-color: white;
@@ -5,7 +6,7 @@ body {
     margin: 0;
     padding: 0;
 }
-
+/* Dashboard container - holds the main content */
 .dashboard-header {
     background-color: #f7a89c; /* peach pink */
     display: flex;
@@ -13,7 +14,7 @@ body {
     align-items: center;
     padding: 15px 20px;
 }
-
+/* Dashboard title */
 .dashboard-header h1 {
     font-size: 24px;
     font-weight: normal;

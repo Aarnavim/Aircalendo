@@ -1,3 +1,4 @@
+/* Owner dashboard styling - responsive grid layout for owner controls */
 @import url('https://fonts.googleapis.com/css2?family=Italiana&display=swap');
 
 body {
@@ -11,7 +12,7 @@ body {
     align-items: flex-start;
     height: 100vh;
 }
-
+/* Dashboard container - holds the main content */
 .dashboard-container {
     width: 400px;
     margin-top: 40px;

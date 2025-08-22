@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -15,6 +16,7 @@
             height: 100vh;
             margin: 0;
             padding: 20px;
+            position: relative;
         }
         .form-container {
             width: 400px;
@@ -22,6 +24,23 @@
             padding: 20px;
             border-radius: 8px;
             box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        .home-button {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background-color: black;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 16px;
+            text-decoration: none;
+            font-family: 'Italiana', serif;
+        }
+        .home-button:hover {
+            background-color: #333;
         }
         h1 {
             margin-top: 0;
@@ -58,6 +77,7 @@
     </style>
 </head>
 <body>
+    <a href="/owner_dashboard" class="home-button">Home</a>
     <div class="form-container">
         <h1>Add Booking</h1>
         <form method="POST" action="/bookings/add">

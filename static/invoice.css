@@ -1,3 +1,4 @@
+/* Invoice CSS Stylesheet - The visual style for the invoice page */
 body {
     font-family: 'Italiana', serif;
     background-color: white;
@@ -6,7 +7,7 @@ body {
     color: black;
     font-size: 20px;
 }
-
+/* Invoice container - holds the main content */
 .invoice-container {
     width: 95vw; /* Increased width to fit screen */
     max-width: 1200px; /* Optional max width for large screens */
@@ -17,7 +18,7 @@ body {
     box-sizing: border-box;
     min-height: 90vh; /* Make container height bigger */
 }
-
+/* Invoice header - contains the title and address */
 .invoice-header {
     background-color: #f7a89c; /* Peach pink */
     color: black;
