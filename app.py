@@ -93,6 +93,16 @@ def init_db():
                     availability TEXT
                 )
             ''')
+            c.execute('''
+                CREATE TABLE messages (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    sender TEXT NOT NULL,
+                    text TEXT NOT NULL,
+                    type TEXT DEFAULT 'chat',
+                    cleaner TEXT,
+                    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
             c.execute("INSERT INTO users (username, password, role) VALUES (?, ?, ?)", ("Supriti", "Owner@gardenia", "owner"))
             c.execute("INSERT INTO users (username, password, role) VALUES (?, ?, ?)", ("CleanerM@AC", "Cleaner@AC", "cleaner"))
             conn.commit()
@@ -101,6 +111,53 @@ def init_db():
 # ------------------------
 # ROUTES
 # ------------------------
+
+@app.route('/debug/attendance')
+def debug_attendance():
+    if 'user_id' not in session:
+        return jsonify({'error': 'Unauthorized'}), 401
+    try:
+        conn = get_db()
+        c = conn.cursor()
+        c.execute('''
+            SELECT id, user_id, username, clock_in, clock_out, hours_worked
+            FROM attendance
+            WHERE user_id=?
+            ORDER BY clock_in DESC
+        ''', (session['user_id'],))
+        attendance_rows = c.fetchall()
+
+        c.execute('''
+            SELECT id, client_name, date, time, cleaner
+            FROM bookings
+            WHERE cleaner=?
+            ORDER BY date DESC
+        ''', (session.get('username'),))
+        booking_rows = c.fetchall()
+
+        return jsonify({
+            'attendance': [
+                {
+                    'id': row[0],
+                    'user_id': row[1],
+                    'username': row[2],
+                    'clock_in': row[3],
+                    'clock_out': row[4],
+                    'hours_worked': row[5]
+                } for row in attendance_rows
+            ],
+            'bookings': [
+                {
+                    'id': row[0],
+                    'client_name': row[1],
+                    'date': row[2],
+                    'time': row[3],
+                    'cleaner': row[4]
+                } for row in booking_rows
+            ]
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/')
 def home():
@@ -280,8 +337,9 @@ def clock_in():
     if session.get('role') in ['owner', 'cleaner']:
         conn = get_db()
         c = conn.cursor()
+        clock_in_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         c.execute("INSERT INTO attendance (user_id, username, clock_in) VALUES (?, ?, ?)", 
-                  (session['user_id'], session['username'], datetime.now()))
+                  (session['user_id'], session['username'], clock_in_time))
         conn.commit()
         return redirect(url_for('clock'))
     return redirect(url_for('home'))
@@ -301,22 +359,48 @@ def clock_out():
             ''', (session['user_id'],))
             row = c.fetchone()
             if row:
-                clock_in_time = datetime.strptime(row[0], '%Y-%m-%d %H:%M:%S.%f')
+                clock_in_time = datetime.strptime(row[0], '%Y-%m-%d %H:%M:%S')
                 duration = clock_out_time - clock_in_time
                 hours_worked = duration.total_seconds() / 3600.0
+                clock_out_time_str = clock_out_time.strftime('%Y-%m-%d %H:%M:%S')
                 c.execute('''
                     UPDATE attendance 
                     SET clock_out=?, hours_worked=?
                     WHERE user_id=? AND clock_out IS NULL
-                ''', (clock_out_time, hours_worked, session['user_id']))
+                ''', (clock_out_time_str, hours_worked, session['user_id']))
                 conn.commit()
+                return jsonify({'message': 'Clocked out successfully', 'hours_worked': hours_worked}), 200
             else:
                 return jsonify({'error': 'No active clock-in record found'}), 400
-            return jsonify({'message': 'Clocked out successfully'}), 200
         except Exception as e:
             print(f"Error during clock out: {e}")
             return jsonify({'error': f'Failed to clock out: {e}'}), 500
     return redirect(url_for('home'))
+
+@app.route('/api/total_hours')
+def api_total_hours():
+    """API endpoint to get total hours worked by the logged-in user"""
+    if session.get('role') not in ['owner', 'cleaner']:
+        return jsonify({'error': 'Unauthorized'}), 401
+    
+    try:
+        conn = get_db()
+        c = conn.cursor()
+        
+        # Calculate total hours worked by the user
+        c.execute('''
+            SELECT COALESCE(SUM(hours_worked), 0) FROM attendance
+            WHERE user_id=?
+        ''', (session['user_id'],))
+        
+        result = c.fetchone()
+        total_hours = result[0] if result and result[0] is not None else 0
+        
+        return jsonify({'total_hours': total_hours})
+        
+    except Exception as e:
+        print(f"Error fetching total hours: {e}")
+        return jsonify({'error': 'Failed to fetch total hours'}), 500
 
 @app.route('/clock')
 def clock():
@@ -365,24 +449,27 @@ def invoices():
             try:
                 c.execute('''
                     SELECT COALESCE(SUM(hours_worked), 0) FROM attendance
-                    WHERE user_id = ? AND clock_in BETWEEN ? AND ?
+                    WHERE user_id = ? AND clock_out BETWEEN ? AND ?
                 ''', (session['user_id'], week_ago.isoformat() + " 00:00:00", today.isoformat() + " 23:59:59"))
                 result = c.fetchone()
                 total_hours_worked = result[0] if result and result[0] is not None else 0
+                print(f"DEBUG: Found {total_hours_worked} hours worked in the week based on clock_out")
             except Exception as e:
                 print(f"Error calculating hours: {e}")
                 total_hours_worked = 0
         
-        total_earnings = total_hours_worked * hourly_rate
+        print(f"DEBUG: total_hours_worked={total_hours_worked}, hourly_rate={hourly_rate}")
+        total_earnings = float(total_hours_worked) * float(hourly_rate)
+        print(f"DEBUG: total_earnings={total_earnings}")
         
         if role == 'cleaner':
             try:
-                # Get bookings for the cleaner
+                # Get all bookings for the cleaner (not limited to last 7 days)
                 c.execute('''
                     SELECT id, client_name, date, time FROM bookings
-                    WHERE cleaner=? AND date BETWEEN ? AND ?
+                    WHERE cleaner=?
                     ORDER BY date DESC
-                ''', (username, week_ago.isoformat(), today.isoformat()))
+                ''', (username,))
                 bookings = c.fetchall()
                 
                 invoice_data = []
@@ -393,12 +480,21 @@ def invoices():
                         start_datetime = date_str + " 00:00:00"
                         end_datetime = date_str + " 23:59:59"
                         c.execute('''
-                            SELECT COALESCE(SUM(hours_worked), 0) FROM attendance
-                            WHERE LOWER(username)=LOWER(?) AND clock_in BETWEEN ? AND ?
-                        ''', (username, start_datetime, end_datetime))
-                        hours_result = c.fetchone()
-                        hours_worked = hours_result[0] if hours_result and hours_result[0] is not None else 0
+                            SELECT id, clock_in, clock_out, hours_worked FROM attendance
+                            WHERE user_id = ? AND 
+                            (
+                                (clock_in BETWEEN ? AND ?) OR
+                                (clock_out BETWEEN ? AND ?)
+                            )
+                        ''', (session['user_id'], start_datetime, end_datetime, start_datetime, end_datetime))
+                        attendance_records = c.fetchall()
+                        print(f"DEBUG: Booking {booking_id} date: {date_str}")
+                        for record in attendance_records:
+                            print(f"DEBUG: Attendance record clock_in: {record[1]}, clock_out: {record[2]}, hours_worked: {record[3]}")
+                        hours_worked = sum([record[3] for record in attendance_records if record[3] is not None])
+                        print(f"DEBUG: Booking {booking_id} hours_worked={hours_worked} (sum of attendance records)")
                         earning = hours_worked * hourly_rate
+                        print(f"DEBUG: Booking {booking_id} earning={earning}")
                         
                         invoice_data.append({
                             'client_name': client_name or 'Unknown Client',
@@ -421,6 +517,17 @@ def invoices():
                 print(f"Error getting cleaner bookings: {e}")
                 invoice_data = []
                 
+            # Calculate total earnings from all attendance records, not just last 7 days
+            c.execute('''
+                SELECT COALESCE(SUM(hours_worked), 0) FROM attendance
+                WHERE user_id = ?
+            ''', (session['user_id'],))
+            result = c.fetchone()
+            total_hours_worked = result[0] if result and result[0] is not None else 0
+            total_earnings = float(total_hours_worked) * float(hourly_rate)
+            print(f"DEBUG: Total hours worked (all time): {total_hours_worked}")
+            print(f"DEBUG: Total earnings (all time): {total_earnings}")
+            
             return render_template('invoice.html', 
                                  username=username, 
                                  invoice_data=invoice_data, 
@@ -434,19 +541,20 @@ def invoices():
                 c.execute("SELECT username FROM users WHERE role='cleaner'")
                 cleaners = [row[0] for row in c.fetchall()]
                 
-                # Calculate total hours for all cleaners
+                # Calculate total hours for all cleaners (all time, not just last 7 days)
                 try:
                     c.execute('''
                         SELECT COALESCE(SUM(hours_worked), 0) FROM attendance
-                        WHERE clock_in BETWEEN ? AND ?
-                    ''', (week_ago.isoformat() + " 00:00:00", today.isoformat() + " 23:59:59"))
+                    ''')
                     total_result = c.fetchone()
                     total_hours_all_cleaners = total_result[0] if total_result and total_result[0] is not None else 0
+                    print(f"DEBUG: Found {total_hours_all_cleaners} total hours for all cleaners (all time)")
                 except Exception as e:
                     print(f"Error calculating total hours: {e}")
                     total_hours_all_cleaners = 0
                 
-                total_earnings = total_hours_all_cleaners * hourly_rate
+                # Calculate total earnings directly from total_hours_all_cleaners
+                total_earnings = float(total_hours_all_cleaners) * float(hourly_rate)
                 
                 cleaners_invoice = []
                 for cleaner_username in cleaners:
@@ -467,11 +575,13 @@ def invoices():
                                 end_datetime = date_str + " 23:59:59"
                                 c.execute('''
                                     SELECT COALESCE(SUM(hours_worked), 0) FROM attendance
-                                    WHERE LOWER(username)=LOWER(?) AND clock_in BETWEEN ? AND ?
+                                    WHERE LOWER(username)=LOWER(?) AND clock_out BETWEEN ? AND ?
                                 ''', (cleaner_username, start_datetime, end_datetime))
                                 hours_result = c.fetchone()
                                 hours_worked = hours_result[0] if hours_result and hours_result[0] is not None else 0
+                                print(f"DEBUG: Cleaner {cleaner_username} Booking {booking_id} hours_worked={hours_worked} (based on clock_out)")
                                 earning = hours_worked * hourly_rate
+                                print(f"DEBUG: Cleaner {cleaner_username} Booking {booking_id} earning={earning}")
                                 
                                 invoice_data.append({
                                     'client_name': client_name or 'Unknown Client',
@@ -557,7 +667,8 @@ def cleaner_chat():
     if session.get('role') not in ['owner', 'cleaner']:
         return redirect(url_for('home'))
     
-    return render_template('cleaner_chat.html', username=session['username'], messages=chat_messages)
+    messages = get_chat_messages()
+    return render_template('cleaner_chat.html', username=session['username'], messages=messages)
 
 @app.route('/bookings')
 def bookings():
@@ -609,19 +720,69 @@ def add_booking():
         c.execute("INSERT INTO bookings (client_name, date, time, location, cleaner) VALUES (?, ?, ?, ?, ?)",
                   (client, date, time, location, cleaner))
         conn.commit()
+        
+        # Add booking notification to database
+        save_message(
+            sender=session.get('username', 'Owner'),
+            text=f'New booking: {client} on {date} at {time}',
+            message_type='booking',
+            cleaner=cleaner
+        )
+        
         return redirect(url_for('bookings'))
 
     # GET request: render the add booking form with cleaners list
     return render_template('add_booking.html', cleaners=cleaners)
 
-# In-memory message store for demonstration
-chat_messages = []
+def get_chat_messages():
+    """Get all chat messages from database"""
+    conn = get_db()
+    c = conn.cursor()
+    c.execute("SELECT sender, text, type, cleaner, timestamp FROM messages ORDER BY timestamp ASC")
+    messages = []
+    for row in c.fetchall():
+        messages.append({
+            'sender': row[0],
+            'text': row[1],
+            'type': row[2],
+            'cleaner': row[3],
+            'timestamp': row[4]
+        })
+    return messages
+
+def save_message(sender, text, message_type='chat', cleaner=None):
+    """Save a message to the database"""
+    conn = get_db()
+    c = conn.cursor()
+    c.execute("INSERT INTO messages (sender, text, type, cleaner) VALUES (?, ?, ?, ?)",
+              (sender, text, message_type, cleaner))
+    conn.commit()
+
+@app.route('/api/cleaner/notifications')
+def cleaner_notifications():
+    """API endpoint to fetch notifications for cleaner (owner messages and booking notifications)"""
+    if session.get('role') != 'cleaner':
+        return jsonify({'error': 'Unauthorized'}), 401
+    
+    messages = get_chat_messages()
+    # Get all messages from owner (chat messages and booking notifications)
+    owner_messages = []
+    for msg in messages:
+        if msg.get('sender') and 'owner' in msg.get('sender').lower():
+            # Include all owner messages
+            owner_messages.append(msg)
+        elif msg.get('type') == 'booking' and msg.get('cleaner') == session['username']:
+            # Include booking notifications specifically for this cleaner
+            owner_messages.append(msg)
+    
+    return jsonify({'messages': owner_messages})
 
 @app.route('/owner/chat')
 def owner_chat():
     if session.get('role') != 'owner':
         return redirect(url_for('home'))
-    return render_template('owner_chat.html', username=session.get('username', 'Owner'), messages=chat_messages, role=session.get('role'))
+    messages = get_chat_messages()
+    return render_template('owner_chat.html', username=session.get('username', 'Owner'), messages=messages, role=session.get('role'))
 
 @app.route('/owner/chat/send', methods=['POST'])
 def owner_chat_send():
@@ -629,7 +790,7 @@ def owner_chat_send():
         return redirect(url_for('home'))
     message = request.form.get('message', '').strip()
     if message:
-        chat_messages.append({'sender': session.get('username', 'Owner'), 'text': message})
+        save_message(session.get('username', 'Owner'), message)
     return redirect(url_for('owner_chat'))
 
 @app.route('/cleaner/chat/send', methods=['POST'])
@@ -639,7 +800,7 @@ def cleaner_chat_send():
         return redirect(url_for('home'))
     message = request.form.get('message', '').strip()
     if message:
-        chat_messages.append({'sender': session.get('username', 'User'), 'text': message})
+        save_message(session.get('username', 'User'), message)
     return redirect(url_for('cleaner_chat'))
 
 @app.route('/change_password')

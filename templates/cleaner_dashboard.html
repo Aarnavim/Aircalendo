@@ -7,11 +7,64 @@
     <link href="https://fonts.googleapis.com/css2?family=Italiana&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="/static/cleaner_dashboard.css" />
     <link rel="stylesheet" href="/static/cleaner_chat_button.css" />
+    <style>
+        /* Notifications dropdown styles */
+        .notification-dropdown {
+            position: absolute;
+            top: 40px;
+            right: 0;
+            background: white;
+            border: 1px solid #ccc;
+            width: 300px;
+            max-height: 400px;
+            overflow-y: auto;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+            display: none;
+            z-index: 1000;
+        }
+        .notification-dropdown.active {
+            display: block;
+        }
+        .notification-item {
+            padding: 10px;
+            border-bottom: 1px solid #eee;
+            font-family: 'Italiana', serif;
+            font-size: 14px;
+        }
+        .notification-item:last-child {
+            border-bottom: none;
+        }
+        .notification-item .sender {
+            font-weight: bold;
+            margin-bottom: 5px;
+            display: block;
+        }
+        .notification-icon {
+            cursor: pointer;
+            position: relative;
+            font-size: 24px;
+            user-select: none;
+        }
+        .notification-count {
+            position: absolute;
+            top: -6px;
+            right: -6px;
+            background: red;
+            color: white;
+            font-size: 12px;
+            font-weight: bold;
+            border-radius: 50%;
+            padding: 2px 6px;
+            min-width: 18px;
+            text-align: center;
+            line-height: 1;
+        }
+    </style>
 </head>
 <body>
     <header class="dashboard-header">
         <h1>Welcome, {{ username }}</h1>
-        <div class="header-icons">
+        <div class="header-icons" style="position: relative;">
             <a href="/cleaner/chat" class="chat-button" title="Chat" aria-label="Chat">
                 <svg xmlns="http://www.w3.org/2000/svg" class="chat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="24" height="24">
                     <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2z"></path>
@@ -20,7 +73,10 @@
                     <line x1="16" y1="10" x2="16" y2="10"></line>
                 </svg>
             </a>
-            <span class="icon notification-icon" title="Notifications">&#128276;<sup class="notification-count">1</sup></span>
+            <span class="icon notification-icon" title="Notifications" aria-label="Notifications" id="notificationIcon">&#128276;
+                <sup class="notification-count" id="notificationCount" style="display:none;">0</sup>
+            </span>
+            <div class="notification-dropdown" id="notificationDropdown" aria-label="Notifications List" role="list"></div>
             <span class="icon profile-icon" title="Profile">&#128100;</span>
         </div>
     </header>
@@ -41,5 +97,62 @@
         <a href="/calendar" class="footer-icon" title="Calendar">&#128197;</a>
         <a href="/change_password" class="footer-icon" title="Change Password">&#128274;</a>
     </footer>
+    <script>
+        const notificationIcon = document.getElementById('notificationIcon');
+        const notificationDropdown = document.getElementById('notificationDropdown');
+        const notificationCount = document.getElementById('notificationCount');
+
+        let notifications = [];
+
+        // Toggle dropdown visibility
+        notificationIcon.addEventListener('click', () => {
+            notificationDropdown.classList.toggle('active');
+            if (notificationDropdown.classList.contains('active')) {
+                // Mark notifications as read (clear count)
+                notificationCount.style.display = 'none';
+            }
+        });
+
+        // Fetch notifications (owner chat messages) from backend API
+        async function fetchNotifications() {
+            try {
+                const response = await fetch('/api/cleaner/notifications');
+                if (!response.ok) throw new Error('Network response was not ok');
+                const data = await response.json();
+                notifications = data.messages || [];
+                updateNotificationUI();
+            } catch (error) {
+                console.error('Failed to fetch notifications:', error);
+            }
+        }
+
+        // Update notification count and dropdown list
+        function updateNotificationUI() {
+            if (notifications.length > 0) {
+                notificationCount.textContent = notifications.length;
+                notificationCount.style.display = 'inline-block';
+            } else {
+                notificationCount.style.display = 'none';
+            }
+
+            notificationDropdown.innerHTML = '';
+            if (notifications.length === 0) {
+                notificationDropdown.innerHTML = '<div class="notification-item">No new messages</div>';
+                return;
+            }
+
+            notifications.forEach(msg => {
+                const item = document.createElement('div');
+                item.className = 'notification-item';
+                item.setAttribute('role', 'listitem');
+                item.innerHTML = `<span class="sender">${msg.sender}</span><span class="message-text">${msg.text}</span>`;
+                notificationDropdown.appendChild(item);
+            });
+        }
+
+        // Initial fetch and periodic refresh every 30 seconds
+        fetchNotifications();
+        setInterval(fetchNotifications, 30000);
+    </script>
 </body>
 </html>

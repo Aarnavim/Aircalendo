@@ -100,9 +100,10 @@
         function loadTotalHours() {
             fetch('/api/total_hours')
                 .then(response => response.json())
-                .then(data => {
-                    document.getElementById('totalHours').textContent = data.total_hours || '0';
-                })
+.then(data => {
+    const totalHours = data.total_hours || 0;
+    document.getElementById('totalHours').textContent = totalHours.toFixed(2);
+})
                 .catch(error => {
                     console.error('Error loading total hours:', error);
                     document.getElementById('totalHours').textContent = '0';

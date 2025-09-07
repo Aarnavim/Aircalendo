@@ -46,22 +46,18 @@
                         </div>
                     </section>
                     <section class="invoice-summary-box">
-                        {% set total_earnings = namespace(value=0) %}
-                        {% for record in cleaner.invoice_data %}
-                            {% set total_earnings.value = total_earnings.value + (record.earning or 0) %}
-                            <p>{{ record.date or 'N/A' }} : {{ "%.2f"|format(record.hours_worked or 0) }} hours <span class="price">${{ "%.2f"|format(record.earning or 0) }}</span></p>
-                        {% endfor %}
-                        <hr />
-                        <p><strong>Total Earnings:</strong> <span class="price">${{ "%.2f"|format(total_earnings.value) }}</span></p>
+            {# Removed per-record earnings calculation to use backend total_earnings #}
+            <hr />
+            <p><strong>Total Earnings:</strong> <span class="price">${{ "%.2f"|format(total_earnings) }}</span></p>
                     </section>
                 {% endif %}
             {% endfor %}
             {% if not cleaners_invoice %}
                 <section class="invoice-summary-box">
                     <p style="text-align: center;">No invoice data available for any cleaners.</p>
-                    <p style="text-align: center;">Total hours worked this week: {{ "%.2f"|format(total_hours_worked or 0) }}</p>
+                    <p style="text-align: center; font-weight: bold;">Total hours worked this week: {{ "%.2f"|format(total_hours_worked or 0) }}</p>
                     <hr />
-                    <p><strong>Total Earnings:</strong> <span class="price">${{ "%.2f"|format(total_earnings or 0) }}</span></p>
+                    <p style="text-align: center; font-weight: bold;"><strong>Total Earnings:</strong> <span class="price">${{ "%.2f"|format(total_earnings or 0) }}</span></p>
                 </section>
             {% endif %}
         {% elif role == 'cleaner' and invoice_data %}
@@ -81,13 +77,10 @@
                 </div>
             </section>
             <section class="invoice-summary-box">
-                {% set total_earnings = namespace(value=0) %}
-                {% for record in invoice_data %}
-                    {% set total_earnings.value = total_earnings.value + (record.earning or 0) %}
-                    <p>{{ record.date or 'N/A' }} : {{ "%.2f"|format(record.hours_worked or 0) }} hours <span class="price">${{ "%.2f"|format(record.earning or 0) }}</span></p>
-                {% endfor %}
+                {# Use backend-calculated total_earnings instead of recalculating #}
+                <p style="font-weight: bold;">Total hours worked: {{ "%.2f"|format(total_hours_worked or 0) }}</p>
                 <hr />
-                <p><strong>Total Earnings:</strong> <span class="price">${{ "%.2f"|format(total_earnings.value) }}</span></p>
+                <p><strong>Total Earnings:</strong> <span class="price">${{ "%.2f"|format(total_earnings or 0) }}</span></p>
             </section>
         {% else %}
             <section class="invoice-details">
